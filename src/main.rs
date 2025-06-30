@@ -28,8 +28,8 @@ fn main() -> Result<()> {
         Commands::Add { branch_name } => {
             add::run(&branch_name)?;
         }
-        Commands::List => {
-            list::run()?;
+        Commands::List { local } => {
+            list::run(local)?;
         }
         Commands::Remove { branch_name } => {
             remove::run(branch_name.as_deref())?;

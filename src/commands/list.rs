@@ -19,7 +19,7 @@ struct RemotePullRequest {
 }
 
 #[tokio::main]
-pub async fn run() -> Result<()> {
+pub async fn run(local_only: bool) -> Result<()> {
     // Find a git directory to work with
     let git_dir = find_git_directory()?;
 
@@ -196,7 +196,7 @@ pub async fn run() -> Result<()> {
     // Fetch all open pull requests and add ones that don't have local worktrees
     let mut remote_prs: Vec<RemotePullRequest> = Vec::new();
 
-    if has_pr_info {
+    if has_pr_info && !local_only {
         match &repo_info {
             Some((platform, owner_or_workspace, repo)) => {
                 match platform.as_str() {
@@ -277,7 +277,7 @@ pub async fn run() -> Result<()> {
     }
 
     // Display remote PRs if any exist
-    if !remote_prs.is_empty() {
+    if !remote_prs.is_empty() && !local_only {
         if !display_worktrees.is_empty() {
             println!(); // Add spacing between sections
         }
@@ -289,7 +289,7 @@ pub async fn run() -> Result<()> {
         }
     }
 
-    if !has_pr_info {
+    if !has_pr_info && !local_only {
         if let Some((_, config)) = config::GitWorktreeConfig::find_config()? {
             match config.source_control.as_str() {
                 "bitbucket-cloud" => {

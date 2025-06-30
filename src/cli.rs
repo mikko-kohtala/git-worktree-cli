@@ -94,7 +94,11 @@ pub enum Commands {
     },
 
     /// List all worktrees in the current project
-    List,
+    List {
+        /// Show only local worktrees (skip remote PRs)
+        #[arg(short, long)]
+        local: bool,
+    },
 
     /// Remove a worktree
     Remove {
