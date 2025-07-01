@@ -56,10 +56,10 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
 fn extract_repo_name(repo_url: &str) -> Result<String> {
     let name = repo_url
         .split('/')
-        .last()
+        .next_back()
         .context("Invalid repository URL")?
         .strip_suffix(".git")
-        .unwrap_or_else(|| repo_url.split('/').last().unwrap());
+        .unwrap_or_else(|| repo_url.split('/').next_back().unwrap());
 
     Ok(name.to_string())
 }

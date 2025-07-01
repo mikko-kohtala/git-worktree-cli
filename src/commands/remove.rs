@@ -4,8 +4,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::git;
-use crate::hooks;
+use crate::{constants, git, hooks};
 
 pub fn run(branch_name: Option<&str>) -> Result<()> {
     // Find a git directory to work with
@@ -62,7 +61,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
     let project_root = find_project_root(&target_worktree.path)?;
 
     // Find another worktree to run git commands from
-    let main_branches = ["main", "master", "dev", "develop"];
+    let main_branches = constants::PROTECTED_BRANCHES;
     let git_working_dir = worktrees
         .iter()
         .find(|wt| {
@@ -109,15 +108,15 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
                         "{}",
                         format!("⚠️  Branch '{}' has unmerged changes", branch_display).yellow()
                     );
-                    
+
                     // Ask for confirmation to force delete
                     print!("{}", "Force delete the branch? (y/N): ".cyan());
                     io::stdout().flush()?;
-                    
+
                     let mut input = String::new();
                     io::stdin().read_line(&mut input)?;
                     let force_delete = input.trim().to_lowercase();
-                    
+
                     if force_delete == "y" || force_delete == "yes" {
                         match git::execute_streaming(&["branch", "-D", branch_display], Some(&git_working_dir.path)) {
                             Ok(_) => {

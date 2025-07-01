@@ -3,7 +3,10 @@ use colored::Colorize;
 use std::fs;
 use std::path::PathBuf;
 
-use super::list_helpers::{clean_branch_name, fetch_pr_for_branch, PullRequestInfo, extract_bitbucket_cloud_url, extract_bitbucket_data_center_url};
+use super::list_helpers::{
+    clean_branch_name, extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch,
+    PullRequestInfo,
+};
 use crate::{
     bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config, git, github,
 };
@@ -177,17 +180,14 @@ pub async fn run(local_only: bool) -> Result<()> {
             None
         };
 
-        display_worktrees.push(WorktreeDisplay {
-            branch,
-            pr_info,
-        });
+        display_worktrees.push(WorktreeDisplay { branch, pr_info });
     }
 
     // Display local worktrees
     if !display_worktrees.is_empty() {
         println!("{}", "Local Worktrees:".bold());
         println!();
-        
+
         for worktree in &display_worktrees {
             display_worktree(&worktree);
         }
@@ -283,7 +283,7 @@ pub async fn run(local_only: bool) -> Result<()> {
         }
         println!("{}", "Open Pull Requests (no local worktree):".bold());
         println!();
-        
+
         for pr in &remote_prs {
             display_remote_pr(&pr);
         }
@@ -318,7 +318,7 @@ pub async fn run(local_only: bool) -> Result<()> {
 fn display_worktree(worktree: &WorktreeDisplay) {
     // Display branch name in cyan
     println!("{}", worktree.branch.cyan());
-    
+
     // Display PR info if available
     if let Some(ref pr_info) = worktree.pr_info {
         // Display URL with status
@@ -330,7 +330,7 @@ fn display_worktree(worktree: &WorktreeDisplay) {
             _ => pr_info.status.normal(),
         };
         println!("  {} ({})", pr_info.url.blue().underline(), status_colored);
-        
+
         // Display title if not empty
         if !pr_info.title.is_empty() {
             println!("  {}", pr_info.title.dimmed());
@@ -342,17 +342,17 @@ fn display_worktree(worktree: &WorktreeDisplay) {
 fn display_remote_pr(pr: &RemotePullRequest) {
     // Display branch name in cyan
     println!("{}", pr.branch.cyan());
-    
+
     // Display URL with status
     let status_colored = match pr.pr_info.status.as_str() {
         "OPEN" => "open".green(),
-        "CLOSED" => "closed".red(), 
+        "CLOSED" => "closed".red(),
         "MERGED" => "merged".green(),
         "DRAFT" => "draft".yellow(),
         _ => pr.pr_info.status.normal(),
     };
     println!("  {} ({})", pr.pr_info.url.blue().underline(), status_colored);
-    
+
     // Display title
     if !pr.pr_info.title.is_empty() {
         println!("  {}", pr.pr_info.title.dimmed());
