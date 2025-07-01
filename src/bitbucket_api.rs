@@ -80,7 +80,7 @@ impl BitbucketClient {
         let response = self
             .client
             .get(&url)
-            .basic_auth(&self.get_email(), Some(&token))
+            .basic_auth(self.get_email(), Some(&token))
             .header("Accept", "application/json")
             .send()
             .await
@@ -120,7 +120,7 @@ impl BitbucketClient {
         let response = self
             .client
             .get(url)
-            .basic_auth(&self.get_email(), Some(&token))
+            .basic_auth(self.get_email(), Some(&token))
             .header("Accept", "application/json")
             .send()
             .await

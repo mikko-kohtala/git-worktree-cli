@@ -10,6 +10,7 @@ mod cli;
 mod commands;
 mod completions;
 mod config;
+mod constants;
 mod git;
 mod github;
 mod hooks;
