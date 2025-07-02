@@ -172,10 +172,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                     )
                     .await;
 
-                    match pr_result {
-                        Ok(info) => info,
-                        Err(_) => None,
-                    }
+                    pr_result.unwrap_or_default()
                 }
                 None => None,
             }

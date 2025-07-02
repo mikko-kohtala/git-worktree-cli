@@ -92,23 +92,35 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
     Err(Error::GitDirectoryNotFound)
 }
 
-/// Find an existing worktree directory (has .git file pointing to bare repo)
+/// Find an existing git directory (worktree or main repository)
+/// 
+/// This function looks for any directory with a .git file or directory,
+/// prioritizing worktrees (where .git is a file) over main repositories.
 pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
     let entries = fs::read_dir(project_root).map_err(Error::Io)?;
+
+    let mut main_repo: Option<PathBuf> = None;
 
     for entry in entries {
         let entry = entry.map_err(Error::Io)?;
         if entry.file_type().map_err(Error::Io)?.is_dir() {
             let dir_path = entry.path();
             let git_path = dir_path.join(".git");
-            // Look specifically for worktrees: .git is a file (not a directory)
-            if git_path.exists() && git_path.is_file() {
-                return Ok(dir_path);
+            
+            if git_path.exists() {
+                if git_path.is_file() {
+                    // This is a worktree - prefer these over main repos
+                    return Ok(dir_path);
+                } else if git_path.is_dir() {
+                    // This is a main repository - save as fallback
+                    main_repo = Some(dir_path);
+                }
             }
         }
     }
 
-    Err(Error::Other("No existing worktree found in project".to_string()))
+    // If no worktree found, use main repository if available
+    main_repo.ok_or_else(|| Error::Other("No existing git directory found in project".to_string()))
 }
 
 /// Clean a branch name by removing refs/heads/ prefix
