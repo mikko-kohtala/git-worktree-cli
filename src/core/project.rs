@@ -82,8 +82,8 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
         let entry = entry.map_err(|e| Error::Io(e))?;
         if entry.file_type().map_err(|e| Error::Io(e))?.is_dir() {
             let dir_path = entry.path();
-            if dir_path.join(".git").exists() && !dir_path.join(".git").is_dir() {
-                // This is the bare repository
+            if dir_path.join(".git").exists() {
+                // This is a git directory (worktree or regular repository)
                 return Ok(dir_path);
             }
         }
@@ -92,7 +92,7 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
     Err(Error::GitDirectoryNotFound)
 }
 
-/// Find an existing worktree directory (the bare repository)
+/// Find an existing worktree directory (has .git file pointing to bare repo)
 pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
     let entries = fs::read_dir(project_root).map_err(|e| Error::Io(e))?;
 
@@ -100,8 +100,9 @@ pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
         let entry = entry.map_err(|e| Error::Io(e))?;
         if entry.file_type().map_err(|e| Error::Io(e))?.is_dir() {
             let dir_path = entry.path();
-            // Check if this is a git directory (contains .git file pointing to bare repo)
-            if dir_path.join(".git").exists() && !dir_path.join(".git").is_dir() {
+            let git_path = dir_path.join(".git");
+            // Look specifically for worktrees: .git is a file (not a directory)
+            if git_path.exists() && git_path.is_file() {
                 return Ok(dir_path);
             }
         }

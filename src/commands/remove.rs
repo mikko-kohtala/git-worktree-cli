@@ -1,10 +1,10 @@
-use anyhow::{bail, Result};
 use colored::Colorize;
 use std::io::{self, Write};
 
 use crate::{
     constants,
-    core::project::{clean_branch_name, find_git_directory, find_project_root},
+    core::project::{clean_branch_name, find_git_directory, find_project_root_from},
+    error::{Error, Result},
     git, hooks,
 };
 
@@ -25,7 +25,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
 
     // Check if this is the bare repository
     if target_worktree.bare {
-        bail!("Cannot remove the main (bare) repository.");
+        return Err(Error::msg("Cannot remove the main (bare) repository."));
     }
 
     let branch_display = get_branch_display(target_worktree);
@@ -59,8 +59,12 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    // Find project root
-    let project_root = find_project_root()?;
+    // Find project root from the worktree being removed (go up one level)
+    let project_root = if let Some(parent) = target_worktree.path.parent() {
+        find_project_root_from(parent)?
+    } else {
+        find_project_root_from(&target_worktree.path)?
+    };
 
     // Find another worktree to run git commands from
     let main_branches = constants::PROTECTED_BRANCHES;
@@ -191,7 +195,7 @@ fn find_current_worktree(worktrees: &[git::Worktree]) -> Result<&git::Worktree> 
     worktrees
         .iter()
         .find(|wt| current_dir.starts_with(&wt.path))
-        .ok_or_else(|| anyhow::anyhow!("Not in a git worktree. Please specify a branch to remove."))
+        .ok_or_else(|| Error::msg("Not in a git worktree. Please specify a branch to remove."))
 }
 
 fn find_worktree_by_branch<'a>(worktrees: &'a [git::Worktree], target_branch: &str) -> Result<&'a git::Worktree> {
@@ -207,7 +211,7 @@ fn find_worktree_by_branch<'a>(worktrees: &'a [git::Worktree], target_branch: &s
 
     // Not found, show available worktrees
     show_available_worktrees(worktrees);
-    bail!("Worktree for '{}' not found", target_branch)
+    Err(Error::msg(format!("Worktree for '{}' not found", target_branch)))
 }
 
 fn find_by_branch_name<'a>(worktrees: &'a [git::Worktree], target_branch: &str) -> Option<&'a git::Worktree> {
