@@ -12,6 +12,12 @@ pub struct PullRequest {
 
 pub struct GitHubClient;
 
+impl Default for GitHubClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GitHubClient {
     pub fn new() -> Self {
         Self

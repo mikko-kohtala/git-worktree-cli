@@ -1,14 +1,13 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use colored::Colorize;
-use std::fs;
-use std::path::PathBuf;
 
 use super::list_helpers::{
-    clean_branch_name, extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch,
-    PullRequestInfo,
+    extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch, PullRequestInfo,
 };
 use crate::{
-    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config, git, github,
+    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
+    core::project::{clean_branch_name, find_git_directory},
+    git, github,
 };
 
 struct WorktreeDisplay {
@@ -103,7 +102,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                         }
                     }
                 }
-                "github" | _ => {
+                _ => {
                     // Try GitHub
                     let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
                         .unwrap_or_else(|| ("".to_string(), "".to_string()));
@@ -139,20 +138,24 @@ pub async fn run(local_only: bool) -> Result<()> {
     // Get local branch names for filtering
     let local_branches: Vec<String> = worktrees
         .iter()
-        .filter_map(|wt| wt.branch.as_ref().map(|b| clean_branch_name(b)))
+        .filter_map(|wt| wt.branch.as_ref().map(|b| clean_branch_name(b).to_string()))
         .collect();
 
     // Convert to display format
     let mut display_worktrees: Vec<WorktreeDisplay> = Vec::new();
 
     for wt in &worktrees {
-        let branch = wt.branch.as_ref().map(|b| clean_branch_name(b)).unwrap_or_else(|| {
-            if wt.bare {
-                "(bare)".to_string()
-            } else {
-                wt.head.chars().take(8).collect()
-            }
-        });
+        let branch = wt
+            .branch
+            .as_ref()
+            .map(|b| clean_branch_name(b).to_string())
+            .unwrap_or_else(|| {
+                if wt.bare {
+                    "(bare)".to_string()
+                } else {
+                    wt.head.chars().take(8).collect()
+                }
+            });
 
         // Fetch PR info if available
         let pr_info = if has_pr_info && !wt.bare && branch != "(bare)" {
@@ -169,10 +172,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                     )
                     .await;
 
-                    match pr_result {
-                        Ok(info) => info,
-                        Err(_) => None,
-                    }
+                    pr_result.unwrap_or_default()
                 }
                 None => None,
             }
@@ -189,7 +189,7 @@ pub async fn run(local_only: bool) -> Result<()> {
         println!();
 
         for worktree in &display_worktrees {
-            display_worktree(&worktree);
+            display_worktree(worktree);
         }
     }
 
@@ -197,20 +197,67 @@ pub async fn run(local_only: bool) -> Result<()> {
     let mut remote_prs: Vec<RemotePullRequest> = Vec::new();
 
     if has_pr_info && !local_only {
-        match &repo_info {
-            Some((platform, owner_or_workspace, repo)) => {
-                match platform.as_str() {
-                    "github" => {
-                        if let Some(ref client) = github_client {
-                            if let Ok(all_prs) = client.get_all_pull_requests(owner_or_workspace, repo) {
-                                for (pr, branch_name) in all_prs {
+        if let Some((platform, owner_or_workspace, repo)) = &repo_info {
+            match platform.as_str() {
+                "github" => {
+                    if let Some(ref client) = github_client {
+                        if let Ok(all_prs) = client.get_all_pull_requests(owner_or_workspace, repo) {
+                            for (pr, branch_name) in all_prs {
+                                // Skip if we already have a local worktree for this branch
+                                if !local_branches.contains(&branch_name) {
+                                    let status = if pr.draft { "DRAFT" } else { "OPEN" };
+                                    remote_prs.push(RemotePullRequest {
+                                        branch: branch_name,
+                                        pr_info: PullRequestInfo {
+                                            url: pr.html_url,
+                                            status: status.to_string(),
+                                            title: pr.title.clone(),
+                                        },
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                "bitbucket-cloud" => {
+                    if let Some(ref client) = bitbucket_client {
+                        if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
+                            for pr in all_prs {
+                                // Only include open PRs
+                                if pr.state == "OPEN" {
+                                    let branch_name = pr.source.branch.name.clone();
                                     // Skip if we already have a local worktree for this branch
                                     if !local_branches.contains(&branch_name) {
-                                        let status = if pr.draft { "DRAFT" } else { "OPEN" };
+                                        let url = extract_bitbucket_cloud_url(&pr);
                                         remote_prs.push(RemotePullRequest {
                                             branch: branch_name,
                                             pr_info: PullRequestInfo {
-                                                url: pr.html_url,
+                                                url,
+                                                status: "OPEN".to_string(),
+                                                title: pr.title.clone(),
+                                            },
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "bitbucket-data-center" => {
+                    if let Some(ref client) = bitbucket_data_center_client {
+                        if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
+                            for pr in all_prs {
+                                // Only include open PRs
+                                if pr.state == "OPEN" {
+                                    let branch_name = pr.from_ref.display_id.clone();
+                                    // Skip if we already have a local worktree for this branch
+                                    if !local_branches.contains(&branch_name) {
+                                        let status = if pr.draft.unwrap_or(false) { "DRAFT" } else { "OPEN" };
+                                        let url = extract_bitbucket_data_center_url(&pr);
+                                        remote_prs.push(RemotePullRequest {
+                                            branch: branch_name,
+                                            pr_info: PullRequestInfo {
+                                                url,
                                                 status: status.to_string(),
                                                 title: pr.title.clone(),
                                             },
@@ -220,59 +267,9 @@ pub async fn run(local_only: bool) -> Result<()> {
                             }
                         }
                     }
-                    "bitbucket-cloud" => {
-                        if let Some(ref client) = bitbucket_client {
-                            if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
-                                for pr in all_prs {
-                                    // Only include open PRs
-                                    if pr.state == "OPEN" {
-                                        let branch_name = pr.source.branch.name.clone();
-                                        // Skip if we already have a local worktree for this branch
-                                        if !local_branches.contains(&branch_name) {
-                                            let url = extract_bitbucket_cloud_url(&pr);
-                                            remote_prs.push(RemotePullRequest {
-                                                branch: branch_name,
-                                                pr_info: PullRequestInfo {
-                                                    url,
-                                                    status: "OPEN".to_string(),
-                                                    title: pr.title.clone(),
-                                                },
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "bitbucket-data-center" => {
-                        if let Some(ref client) = bitbucket_data_center_client {
-                            if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
-                                for pr in all_prs {
-                                    // Only include open PRs
-                                    if pr.state == "OPEN" {
-                                        let branch_name = pr.from_ref.display_id.clone();
-                                        // Skip if we already have a local worktree for this branch
-                                        if !local_branches.contains(&branch_name) {
-                                            let status = if pr.draft.unwrap_or(false) { "DRAFT" } else { "OPEN" };
-                                            let url = extract_bitbucket_data_center_url(&pr);
-                                            remote_prs.push(RemotePullRequest {
-                                                branch: branch_name,
-                                                pr_info: PullRequestInfo {
-                                                    url,
-                                                    status: status.to_string(),
-                                                    title: pr.title.clone(),
-                                                },
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
                 }
+                _ => {}
             }
-            None => {}
         }
     }
 
@@ -285,7 +282,7 @@ pub async fn run(local_only: bool) -> Result<()> {
         println!();
 
         for pr in &remote_prs {
-            display_remote_pr(&pr);
+            display_remote_pr(pr);
         }
     }
 
@@ -302,7 +299,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                 "bitbucket-data-center" => {
                     println!("\n{}", "Tip: Run 'gwt auth bitbucket-data-center setup' to enable Bitbucket Data Center pull request information".dimmed());
                 }
-                "github" | _ => {
+                _ => {
                     println!(
                         "\n{}",
                         "Tip: Run 'gh auth login' to enable GitHub pull request information".dimmed()
@@ -358,49 +355,4 @@ fn display_remote_pr(pr: &RemotePullRequest) {
         println!("  {}", pr.pr_info.title.dimmed());
     }
     println!(); // Empty line between PRs
-}
-
-fn find_git_directory() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-
-    // First, try to find git-worktree-config.yaml to determine if we're in a worktree project
-    let mut search_path = current_dir.clone();
-    let mut project_root: Option<PathBuf> = None;
-
-    loop {
-        let config_path = search_path.join("git-worktree-config.yaml");
-        if config_path.exists() {
-            project_root = Some(search_path);
-            break;
-        }
-
-        if !search_path.pop() {
-            break;
-        }
-    }
-
-    if let Some(project_root) = project_root {
-        // Found config file, look for any existing worktree to use for git commands
-        let entries = fs::read_dir(&project_root)?;
-
-        for entry in entries {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let dir_path = entry.path();
-                let git_path = dir_path.join(".git");
-                if git_path.exists() {
-                    return Ok(dir_path);
-                }
-            }
-        }
-
-        bail!("No existing worktrees found in project root. Create one first using gwt init.");
-    } else {
-        // No config found, check if we're directly in a git repository
-        if let Some(git_root) = git::get_git_root()? {
-            Ok(git_root)
-        } else {
-            bail!("Not in a git repository or project root with git-worktree-config.yaml");
-        }
-    }
 }

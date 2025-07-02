@@ -1,5 +1,3 @@
-/// Common branch names and patterns used throughout the application
-
 /// Main/master branch names that are protected from deletion
 pub const PROTECTED_BRANCHES: &[&str] = &["main", "master", "dev", "develop"];
 

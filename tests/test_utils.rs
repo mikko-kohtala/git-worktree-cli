@@ -59,7 +59,7 @@ pub fn get_current_branch(repo_dir: &std::path::Path) -> Result<String, Box<dyn 
     use std::process::Command;
 
     let output = Command::new("git")
-        .args(&["symbolic-ref", "--short", "HEAD"])
+        .args(["symbolic-ref", "--short", "HEAD"])
         .current_dir(repo_dir)
         .output()?;
 
@@ -84,7 +84,7 @@ pub fn is_git_available() -> bool {
 #[macro_export]
 macro_rules! require_git {
     () => {
-        if !crate::test_utils::is_git_available() {
+        if !$crate::test_utils::is_git_available() {
             eprintln!("Skipping test: git not available");
             return;
         }

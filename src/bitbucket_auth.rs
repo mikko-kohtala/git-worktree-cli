@@ -99,7 +99,7 @@ mod tests {
     #[test]
     fn test_bitbucket_auth_creation() {
         // Temporarily remove environment variable for isolated testing
-        let _guard = env::remove_var(EMAIL_ENV_VAR);
+        env::remove_var(EMAIL_ENV_VAR);
 
         let auth = BitbucketAuth::new(
             "myworkspace".to_string(),

@@ -1,15 +1,17 @@
-use anyhow::{bail, Result};
 use colored::Colorize;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::GitWorktreeConfig;
+use crate::core::project::{find_existing_worktree, find_project_root};
+use crate::error::{Error, Result};
 use crate::git;
 use crate::hooks;
 
 pub fn run(branch_name: &str) -> Result<()> {
     if branch_name.is_empty() {
-        bail!("Error: Branch name is required\nUsage: gwt add <branch-name>");
+        return Err(Error::msg(
+            "Error: Branch name is required\nUsage: gwt add <branch-name>",
+        ));
     }
 
     // Determine git root and target path
@@ -107,45 +109,6 @@ fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
     Ok((git_working_dir, target_path, project_root))
 }
 
-fn find_project_root() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-
-    // Search upward for git-worktree-config.yaml
-    let mut search_path = current_dir.clone();
-    loop {
-        if search_path.join("git-worktree-config.yaml").exists() {
-            return Ok(search_path);
-        }
-
-        if !search_path.pop() {
-            break;
-        }
-    }
-
-    // No config found, provide helpful error
-    if git::get_git_root()?.is_some() {
-        bail!("Found git repository but no git-worktree-config.yaml. This doesn't appear to be a worktree project.");
-    } else {
-        bail!("Not in a git repository or project root with git-worktree-config.yaml");
-    }
-}
-
-fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
-    let entries = fs::read_dir(project_root)?;
-
-    for entry in entries {
-        let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            let dir_path = entry.path();
-            if dir_path.join(".git").exists() {
-                return Ok(dir_path);
-            }
-        }
-    }
-
-    bail!("No existing worktrees found in project root. Create one first using gwt init.")
-}
-
 fn get_main_branch(project_root: &Path) -> Result<String> {
     let config_path = project_root.join("git-worktree-config.yaml");
     if config_path.exists() {
@@ -154,7 +117,7 @@ fn get_main_branch(project_root: &Path) -> Result<String> {
     } else {
         // Fallback to detecting from git if no config
         if let Some(git_root) = git::get_git_root()? {
-            git::get_default_branch(&git_root)
+            Ok(git::get_default_branch(&git_root)?)
         } else {
             Ok("main".to_string())
         }
