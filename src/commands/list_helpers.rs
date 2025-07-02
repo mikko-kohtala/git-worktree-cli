@@ -143,10 +143,3 @@ pub fn extract_bitbucket_data_center_url(pr: &bitbucket_data_center_api::Bitbuck
     format!("PR #{}", pr.id)
 }
 
-pub fn clean_branch_name(branch: &str) -> String {
-    if branch.starts_with("refs/heads/") {
-        branch[11..].to_string()
-    } else {
-        branch.to_string()
-    }
-}

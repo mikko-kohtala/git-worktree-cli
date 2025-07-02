@@ -1,14 +1,14 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use colored::Colorize;
-use std::fs;
-use std::path::PathBuf;
 
 use super::list_helpers::{
-    clean_branch_name, extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch,
+    extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch,
     PullRequestInfo,
 };
 use crate::{
-    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config, git, github,
+    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
+    core::project::{clean_branch_name, find_git_directory},
+    git, github,
 };
 
 struct WorktreeDisplay {
@@ -139,14 +139,14 @@ pub async fn run(local_only: bool) -> Result<()> {
     // Get local branch names for filtering
     let local_branches: Vec<String> = worktrees
         .iter()
-        .filter_map(|wt| wt.branch.as_ref().map(|b| clean_branch_name(b)))
+        .filter_map(|wt| wt.branch.as_ref().map(|b| clean_branch_name(b).to_string()))
         .collect();
 
     // Convert to display format
     let mut display_worktrees: Vec<WorktreeDisplay> = Vec::new();
 
     for wt in &worktrees {
-        let branch = wt.branch.as_ref().map(|b| clean_branch_name(b)).unwrap_or_else(|| {
+        let branch = wt.branch.as_ref().map(|b| clean_branch_name(b).to_string()).unwrap_or_else(|| {
             if wt.bare {
                 "(bare)".to_string()
             } else {
@@ -360,47 +360,3 @@ fn display_remote_pr(pr: &RemotePullRequest) {
     println!(); // Empty line between PRs
 }
 
-fn find_git_directory() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
-
-    // First, try to find git-worktree-config.yaml to determine if we're in a worktree project
-    let mut search_path = current_dir.clone();
-    let mut project_root: Option<PathBuf> = None;
-
-    loop {
-        let config_path = search_path.join("git-worktree-config.yaml");
-        if config_path.exists() {
-            project_root = Some(search_path);
-            break;
-        }
-
-        if !search_path.pop() {
-            break;
-        }
-    }
-
-    if let Some(project_root) = project_root {
-        // Found config file, look for any existing worktree to use for git commands
-        let entries = fs::read_dir(&project_root)?;
-
-        for entry in entries {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let dir_path = entry.path();
-                let git_path = dir_path.join(".git");
-                if git_path.exists() {
-                    return Ok(dir_path);
-                }
-            }
-        }
-
-        bail!("No existing worktrees found in project root. Create one first using gwt init.");
-    } else {
-        // No config found, check if we're directly in a git repository
-        if let Some(git_root) = git::get_git_root()? {
-            Ok(git_root)
-        } else {
-            bail!("Not in a git repository or project root with git-worktree-config.yaml");
-        }
-    }
-}

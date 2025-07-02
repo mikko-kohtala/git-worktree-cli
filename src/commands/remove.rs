@@ -1,10 +1,12 @@
 use anyhow::{bail, Result};
 use colored::Colorize;
-use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
 
-use crate::{constants, git, hooks};
+use crate::{
+    constants,
+    core::project::{clean_branch_name, find_git_directory, find_project_root},
+    git, hooks,
+};
 
 pub fn run(branch_name: Option<&str>) -> Result<()> {
     // Find a git directory to work with
@@ -58,7 +60,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
     }
 
     // Find project root
-    let project_root = find_project_root(&target_worktree.path)?;
+    let project_root = find_project_root()?;
 
     // Find another worktree to run git commands from
     let main_branches = constants::PROTECTED_BRANCHES;
@@ -177,79 +179,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn find_git_directory() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()?;
 
-    // First, try to find git-worktree-config.yaml to determine if we're in a worktree project
-    let mut search_path = current_dir.clone();
-    let mut project_root: Option<PathBuf> = None;
-
-    loop {
-        let config_path = search_path.join("git-worktree-config.yaml");
-        if config_path.exists() {
-            project_root = Some(search_path);
-            break;
-        }
-
-        if !search_path.pop() {
-            break;
-        }
-    }
-
-    if let Some(project_root) = project_root {
-        // Found config file, look for any existing worktree to use for git commands
-        let entries = fs::read_dir(&project_root)?;
-
-        for entry in entries {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                let dir_path = entry.path();
-                let git_path = dir_path.join(".git");
-                if git_path.exists() {
-                    return Ok(dir_path);
-                }
-            }
-        }
-
-        bail!("No existing worktrees found in project root. Create one first using gwt init.");
-    } else {
-        // No config found, check if we're directly in a git repository
-        if let Some(git_root) = git::get_git_root()? {
-            Ok(git_root)
-        } else {
-            bail!("Not in a git repository or project root with git-worktree-config.yaml");
-        }
-    }
-}
-
-fn find_project_root(worktree_path: &Path) -> Result<PathBuf> {
-    let mut search_path = worktree_path.to_path_buf();
-
-    // Go up one level from the worktree to find the project root
-    if search_path.pop() {
-        let config_path = search_path.join("git-worktree-config.yaml");
-        if config_path.exists() {
-            return Ok(search_path);
-        }
-    }
-
-    // If not found, try the current directory
-    let current_dir = std::env::current_dir()?;
-    let mut search_path = current_dir;
-
-    loop {
-        let config_path = search_path.join("git-worktree-config.yaml");
-        if config_path.exists() {
-            return Ok(search_path);
-        }
-
-        if !search_path.pop() {
-            break;
-        }
-    }
-
-    bail!("Could not find project root with git-worktree-config.yaml");
-}
 
 fn find_target_worktree<'a>(worktrees: &'a [git::Worktree], branch_name: Option<&str>) -> Result<&'a git::Worktree> {
     match branch_name {
@@ -329,6 +259,3 @@ fn get_branch_display(worktree: &git::Worktree) -> &str {
         })
 }
 
-fn clean_branch_name(branch: &str) -> &str {
-    branch.strip_prefix("refs/heads/").unwrap_or(branch)
-}
