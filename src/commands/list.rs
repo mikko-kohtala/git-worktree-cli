@@ -102,7 +102,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                         }
                     }
                 }
-                "github" | _ => {
+                _ => {
                     // Try GitHub
                     let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
                         .unwrap_or_else(|| ("".to_string(), "".to_string()));
@@ -192,7 +192,7 @@ pub async fn run(local_only: bool) -> Result<()> {
         println!();
 
         for worktree in &display_worktrees {
-            display_worktree(&worktree);
+            display_worktree(worktree);
         }
     }
 
@@ -200,20 +200,67 @@ pub async fn run(local_only: bool) -> Result<()> {
     let mut remote_prs: Vec<RemotePullRequest> = Vec::new();
 
     if has_pr_info && !local_only {
-        match &repo_info {
-            Some((platform, owner_or_workspace, repo)) => {
-                match platform.as_str() {
-                    "github" => {
-                        if let Some(ref client) = github_client {
-                            if let Ok(all_prs) = client.get_all_pull_requests(owner_or_workspace, repo) {
-                                for (pr, branch_name) in all_prs {
+        if let Some((platform, owner_or_workspace, repo)) = &repo_info {
+            match platform.as_str() {
+                "github" => {
+                    if let Some(ref client) = github_client {
+                        if let Ok(all_prs) = client.get_all_pull_requests(owner_or_workspace, repo) {
+                            for (pr, branch_name) in all_prs {
+                                // Skip if we already have a local worktree for this branch
+                                if !local_branches.contains(&branch_name) {
+                                    let status = if pr.draft { "DRAFT" } else { "OPEN" };
+                                    remote_prs.push(RemotePullRequest {
+                                        branch: branch_name,
+                                        pr_info: PullRequestInfo {
+                                            url: pr.html_url,
+                                            status: status.to_string(),
+                                            title: pr.title.clone(),
+                                        },
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                "bitbucket-cloud" => {
+                    if let Some(ref client) = bitbucket_client {
+                        if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
+                            for pr in all_prs {
+                                // Only include open PRs
+                                if pr.state == "OPEN" {
+                                    let branch_name = pr.source.branch.name.clone();
                                     // Skip if we already have a local worktree for this branch
                                     if !local_branches.contains(&branch_name) {
-                                        let status = if pr.draft { "DRAFT" } else { "OPEN" };
+                                        let url = extract_bitbucket_cloud_url(&pr);
                                         remote_prs.push(RemotePullRequest {
                                             branch: branch_name,
                                             pr_info: PullRequestInfo {
-                                                url: pr.html_url,
+                                                url,
+                                                status: "OPEN".to_string(),
+                                                title: pr.title.clone(),
+                                            },
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                "bitbucket-data-center" => {
+                    if let Some(ref client) = bitbucket_data_center_client {
+                        if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
+                            for pr in all_prs {
+                                // Only include open PRs
+                                if pr.state == "OPEN" {
+                                    let branch_name = pr.from_ref.display_id.clone();
+                                    // Skip if we already have a local worktree for this branch
+                                    if !local_branches.contains(&branch_name) {
+                                        let status = if pr.draft.unwrap_or(false) { "DRAFT" } else { "OPEN" };
+                                        let url = extract_bitbucket_data_center_url(&pr);
+                                        remote_prs.push(RemotePullRequest {
+                                            branch: branch_name,
+                                            pr_info: PullRequestInfo {
+                                                url,
                                                 status: status.to_string(),
                                                 title: pr.title.clone(),
                                             },
@@ -223,59 +270,9 @@ pub async fn run(local_only: bool) -> Result<()> {
                             }
                         }
                     }
-                    "bitbucket-cloud" => {
-                        if let Some(ref client) = bitbucket_client {
-                            if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
-                                for pr in all_prs {
-                                    // Only include open PRs
-                                    if pr.state == "OPEN" {
-                                        let branch_name = pr.source.branch.name.clone();
-                                        // Skip if we already have a local worktree for this branch
-                                        if !local_branches.contains(&branch_name) {
-                                            let url = extract_bitbucket_cloud_url(&pr);
-                                            remote_prs.push(RemotePullRequest {
-                                                branch: branch_name,
-                                                pr_info: PullRequestInfo {
-                                                    url,
-                                                    status: "OPEN".to_string(),
-                                                    title: pr.title.clone(),
-                                                },
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    "bitbucket-data-center" => {
-                        if let Some(ref client) = bitbucket_data_center_client {
-                            if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
-                                for pr in all_prs {
-                                    // Only include open PRs
-                                    if pr.state == "OPEN" {
-                                        let branch_name = pr.from_ref.display_id.clone();
-                                        // Skip if we already have a local worktree for this branch
-                                        if !local_branches.contains(&branch_name) {
-                                            let status = if pr.draft.unwrap_or(false) { "DRAFT" } else { "OPEN" };
-                                            let url = extract_bitbucket_data_center_url(&pr);
-                                            remote_prs.push(RemotePullRequest {
-                                                branch: branch_name,
-                                                pr_info: PullRequestInfo {
-                                                    url,
-                                                    status: status.to_string(),
-                                                    title: pr.title.clone(),
-                                                },
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
                 }
+                _ => {}
             }
-            None => {}
         }
     }
 
@@ -288,7 +285,7 @@ pub async fn run(local_only: bool) -> Result<()> {
         println!();
 
         for pr in &remote_prs {
-            display_remote_pr(&pr);
+            display_remote_pr(pr);
         }
     }
 
@@ -305,7 +302,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                 "bitbucket-data-center" => {
                     println!("\n{}", "Tip: Run 'gwt auth bitbucket-data-center setup' to enable Bitbucket Data Center pull request information".dimmed());
                 }
-                "github" | _ => {
+                _ => {
                     println!(
                         "\n{}",
                         "Tip: Run 'gh auth login' to enable GitHub pull request information".dimmed()

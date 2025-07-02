@@ -39,7 +39,7 @@ impl Project {
 
 /// Find the project root containing git-worktree-config.yaml
 pub fn find_project_root() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir().map_err(|e| Error::Io(e))?;
+    let current_dir = std::env::current_dir().map_err(Error::Io)?;
     find_project_root_from(&current_dir)
 }
 
@@ -76,11 +76,11 @@ pub fn find_git_directory() -> Result<PathBuf> {
 
 /// Find the .git directory starting from a specific path
 pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
-    let entries = fs::read_dir(project_root).map_err(|e| Error::Io(e))?;
+    let entries = fs::read_dir(project_root).map_err(Error::Io)?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| Error::Io(e))?;
-        if entry.file_type().map_err(|e| Error::Io(e))?.is_dir() {
+        let entry = entry.map_err(Error::Io)?;
+        if entry.file_type().map_err(Error::Io)?.is_dir() {
             let dir_path = entry.path();
             if dir_path.join(".git").exists() {
                 // This is a git directory (worktree or regular repository)
@@ -94,11 +94,11 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
 
 /// Find an existing worktree directory (has .git file pointing to bare repo)
 pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
-    let entries = fs::read_dir(project_root).map_err(|e| Error::Io(e))?;
+    let entries = fs::read_dir(project_root).map_err(Error::Io)?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| Error::Io(e))?;
-        if entry.file_type().map_err(|e| Error::Io(e))?.is_dir() {
+        let entry = entry.map_err(Error::Io)?;
+        if entry.file_type().map_err(Error::Io)?.is_dir() {
             let dir_path = entry.path();
             let git_path = dir_path.join(".git");
             // Look specifically for worktrees: .git is a file (not a directory)

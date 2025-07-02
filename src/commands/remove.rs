@@ -77,7 +77,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
                     .branch
                     .as_ref()
                     .map(|b| {
-                        let clean_branch = if b.starts_with("refs/heads/") { &b[11..] } else { b };
+                        let clean_branch = b.strip_prefix("refs/heads/").unwrap_or(b);
                         main_branches.contains(&clean_branch)
                     })
                     .unwrap_or(false)

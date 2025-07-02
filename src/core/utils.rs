@@ -21,11 +21,7 @@ pub fn ssh_to_https_url(url: &str) -> String {
 
 /// Get the repository name from a URL
 pub fn get_repo_name_from_url(url: &str) -> Option<String> {
-    let path = if url.ends_with(".git") {
-        &url[..url.len() - 4]
-    } else {
-        url
-    };
+    let path = url.strip_suffix(".git").unwrap_or(url);
 
     Path::new(path)
         .file_name()
