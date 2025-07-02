@@ -2,8 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use super::list_helpers::{
-    extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch,
-    PullRequestInfo,
+    extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch, PullRequestInfo,
 };
 use crate::{
     bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
@@ -146,13 +145,17 @@ pub async fn run(local_only: bool) -> Result<()> {
     let mut display_worktrees: Vec<WorktreeDisplay> = Vec::new();
 
     for wt in &worktrees {
-        let branch = wt.branch.as_ref().map(|b| clean_branch_name(b).to_string()).unwrap_or_else(|| {
-            if wt.bare {
-                "(bare)".to_string()
-            } else {
-                wt.head.chars().take(8).collect()
-            }
-        });
+        let branch = wt
+            .branch
+            .as_ref()
+            .map(|b| clean_branch_name(b).to_string())
+            .unwrap_or_else(|| {
+                if wt.bare {
+                    "(bare)".to_string()
+                } else {
+                    wt.head.chars().take(8).collect()
+                }
+            });
 
         // Fetch PR info if available
         let pr_info = if has_pr_info && !wt.bare && branch != "(bare)" {
@@ -359,4 +362,3 @@ fn display_remote_pr(pr: &RemotePullRequest) {
     }
     println!(); // Empty line between PRs
 }
-

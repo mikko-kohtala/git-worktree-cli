@@ -142,4 +142,3 @@ pub fn extract_bitbucket_data_center_url(pr: &bitbucket_data_center_api::Bitbuck
     }
     format!("PR #{}", pr.id)
 }
-

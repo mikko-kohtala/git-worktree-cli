@@ -39,15 +39,14 @@ impl Project {
 
 /// Find the project root containing git-worktree-config.yaml
 pub fn find_project_root() -> Result<PathBuf> {
-    let current_dir = std::env::current_dir()
-        .map_err(|e| Error::Io(e))?;
+    let current_dir = std::env::current_dir().map_err(|e| Error::Io(e))?;
     find_project_root_from(&current_dir)
 }
 
 /// Find the project root starting from a specific path
 pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     let mut search_path = start_path.to_path_buf();
-    
+
     loop {
         if search_path.join("git-worktree-config.yaml").exists() {
             return Ok(search_path);
@@ -61,7 +60,8 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     // Check if we're in a git repository but missing config
     if let Ok(Some(_)) = crate::git::get_git_root() {
         Err(Error::Other(
-            "Found git repository but no git-worktree-config.yaml. This doesn't appear to be a worktree project.".to_string()
+            "Found git repository but no git-worktree-config.yaml. This doesn't appear to be a worktree project."
+                .to_string(),
         ))
     } else {
         Err(Error::ProjectRootNotFound)
@@ -76,8 +76,7 @@ pub fn find_git_directory() -> Result<PathBuf> {
 
 /// Find the .git directory starting from a specific path
 pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
-    let entries = fs::read_dir(project_root)
-        .map_err(|e| Error::Io(e))?;
+    let entries = fs::read_dir(project_root).map_err(|e| Error::Io(e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| Error::Io(e))?;
@@ -95,8 +94,7 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
 
 /// Find an existing worktree directory (the bare repository)
 pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
-    let entries = fs::read_dir(project_root)
-        .map_err(|e| Error::Io(e))?;
+    let entries = fs::read_dir(project_root).map_err(|e| Error::Io(e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| Error::Io(e))?;

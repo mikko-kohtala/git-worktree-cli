@@ -9,7 +9,9 @@ use crate::hooks;
 
 pub fn run(branch_name: &str) -> Result<()> {
     if branch_name.is_empty() {
-        return Err(Error::msg("Error: Branch name is required\nUsage: gwt add <branch-name>"));
+        return Err(Error::msg(
+            "Error: Branch name is required\nUsage: gwt add <branch-name>",
+        ));
     }
 
     // Determine git root and target path
@@ -106,8 +108,6 @@ fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
 
     Ok((git_working_dir, target_path, project_root))
 }
-
-
 
 fn get_main_branch(project_root: &Path) -> Result<String> {
     let config_path = project_root.join("git-worktree-config.yaml");

@@ -179,8 +179,6 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-
-
 fn find_target_worktree<'a>(worktrees: &'a [git::Worktree], branch_name: Option<&str>) -> Result<&'a git::Worktree> {
     match branch_name {
         None => find_current_worktree(worktrees),
@@ -258,4 +256,3 @@ fn get_branch_display(worktree: &git::Worktree) -> &str {
             }
         })
 }
-

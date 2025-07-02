@@ -13,8 +13,7 @@ pub fn is_git_ssh_url(url: &str) -> bool {
 pub fn ssh_to_https_url(url: &str) -> String {
     if url.starts_with("git@") {
         // Convert git@github.com:user/repo.git to https://github.com/user/repo.git
-        url.replace(":", "/")
-            .replace("git@", "https://")
+        url.replace(":", "/").replace("git@", "https://")
     } else {
         url.to_string()
     }
@@ -27,7 +26,7 @@ pub fn get_repo_name_from_url(url: &str) -> Option<String> {
     } else {
         url
     };
-    
+
     Path::new(path)
         .file_name()
         .and_then(|name| name.to_str())
