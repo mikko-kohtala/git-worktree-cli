@@ -1,4 +1,3 @@
-use anyhow::Result;
 use clap::Parser;
 use colored::Colorize;
 
@@ -6,6 +5,7 @@ use git_worktree_cli::{
     cli::{AuthAction, Cli, Commands, CompletionAction},
     commands::{add, auth, init, list, remove},
     completions,
+    error::Result,
 };
 
 fn main() -> Result<()> {

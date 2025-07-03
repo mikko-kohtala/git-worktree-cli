@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
 use colored::Colorize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cli::Provider;
 use crate::config::{GitWorktreeConfig, CONFIG_FILENAME};
+use crate::error::{Error, Result};
 use crate::git;
 use crate::{bitbucket_api, github};
 
@@ -20,7 +20,7 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
 
     // Remove existing clone directory if it exists
     if Path::new(&repo_name).exists() {
-        fs::remove_dir_all(&repo_name).context("Failed to remove existing directory")?;
+        fs::remove_dir_all(&repo_name).map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
     // Clone the repository with streaming output (this is the key improvement!)
@@ -28,20 +28,20 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
 
     // Get the default branch name
     let repo_path = PathBuf::from(&repo_name);
-    let default_branch = git::get_default_branch(&repo_path).context("Failed to get default branch")?;
+    let default_branch = git::get_default_branch(&repo_path).map_err(|e| Error::git(format!("Failed to get default branch: {}", e)))?;
 
     // Rename directory to match branch name
     let final_dir_name = &default_branch;
     if Path::new(final_dir_name).exists() {
-        fs::remove_dir_all(final_dir_name).context("Failed to remove existing directory")?;
+        fs::remove_dir_all(final_dir_name).map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
-    fs::rename(&repo_name, final_dir_name).context("Failed to rename directory")?;
+    fs::rename(&repo_name, final_dir_name).map_err(|e| Error::msg(format!("Failed to rename directory: {}", e)))?;
 
     // Create configuration file
     let config = GitWorktreeConfig::new(repo_url.to_string(), default_branch.clone(), detected_provider);
     let config_path = project_root.join(CONFIG_FILENAME);
-    config.save(&config_path).context("Failed to save configuration")?;
+    config.save(&config_path).map_err(|e| Error::config(format!("Failed to save configuration: {}", e)))?;
 
     // Print success messages
     println!("{}", format!("✓ Repository cloned to: {}", final_dir_name).green());
@@ -57,7 +57,7 @@ fn extract_repo_name(repo_url: &str) -> Result<String> {
     let name = repo_url
         .split('/')
         .next_back()
-        .context("Invalid repository URL")?
+        .ok_or_else(|| Error::msg("Invalid repository URL"))?
         .strip_suffix(".git")
         .unwrap_or_else(|| repo_url.split('/').next_back().unwrap());
 
@@ -111,13 +111,13 @@ fn warn_provider_mismatch(detected: &Provider, explicit: &Provider) {
     );
 }
 
-fn create_provider_error(repo_url: &str) -> anyhow::Error {
-    anyhow::anyhow!(
+fn create_provider_error(repo_url: &str) -> Error {
+    Error::provider(format!(
         "Could not detect repository provider from URL: {}\n\
          Please specify the provider using --provider:\n\
          - For GitHub: --provider github\n\
          - For Bitbucket Cloud: --provider bitbucket-cloud\n\
          - For Bitbucket Data Center: --provider bitbucket-data-center",
         repo_url
-    )
+    ))
 }

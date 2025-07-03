@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::bitbucket_data_center_auth::BitbucketDataCenterAuth;
+use crate::error::{Error, Result};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BitbucketDataCenterUser {
@@ -154,31 +154,31 @@ impl BitbucketDataCenterClient {
             .header("Accept", "application/json")
             .send()
             .await
-            .context("Failed to send request to Bitbucket Data Center API")?;
+            .map_err(|e| Error::network(format!("Failed to send request to Bitbucket Data Center API: {}", e)))?;
 
         if response.status().is_client_error() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
 
             if status == 401 {
-                return Err(anyhow::anyhow!(
+                return Err(Error::auth(
                     "Authentication failed. Please check your Bitbucket Data Center access token and run 'gwt auth bitbucket-data-center' to update it."
                 ));
             } else if status == 404 {
-                return Err(anyhow::anyhow!(
+                return Err(Error::provider(format!(
                     "Repository not found: {}/{}. Please check the project key and repository slug.",
                     project_key,
                     repo_slug
-                ));
+                )));
             } else {
-                return Err(anyhow::anyhow!("API request failed with status {}: {}", status, text));
+                return Err(Error::provider(format!("API request failed with status {}: {}", status, text)));
             }
         }
 
         let pr_response: BitbucketDataCenterPullRequestsResponse = response
             .json()
             .await
-            .context("Failed to parse Bitbucket Data Center API response")?;
+            .map_err(|e| Error::provider(format!("Failed to parse Bitbucket Data Center API response: {}", e)))?;
 
         Ok(pr_response.values)
     }
@@ -194,7 +194,7 @@ impl BitbucketDataCenterClient {
             .header("Accept", "application/json")
             .send()
             .await
-            .context("Failed to test Bitbucket Data Center API connection")?;
+            .map_err(|e| Error::network(format!("Failed to test Bitbucket Data Center API connection: {}", e)))?;
 
         if response.status().is_success() {
             println!("✓ Bitbucket Data Center API connection successful");
@@ -202,11 +202,11 @@ impl BitbucketDataCenterClient {
         } else {
             let status = response.status();
             if status == 401 {
-                Err(anyhow::anyhow!(
+                Err(Error::auth(
                     "Authentication failed. Please check your Bitbucket Data Center access token."
                 ))
             } else {
-                Err(anyhow::anyhow!("API connection failed with status: {}", status))
+                Err(Error::provider(format!("API connection failed with status: {}", status)))
             }
         }
     }

@@ -1,5 +1,4 @@
-use crate::{bitbucket_api, bitbucket_data_center_api, github};
-use anyhow::Result;
+use crate::{bitbucket_api, bitbucket_data_center_api, error::{Error, Result}, github};
 
 pub struct PullRequestInfo {
     pub url: String,
@@ -56,7 +55,7 @@ fn fetch_github_pr(
                     Ok(None)
                 }
             }
-            Err(_) => Err(anyhow::anyhow!("Failed to fetch GitHub PRs")),
+            Err(_) => Err(Error::provider("Failed to fetch GitHub PRs")),
         }
     } else {
         Ok(None)
@@ -83,7 +82,7 @@ async fn fetch_bitbucket_cloud_pr(
                     Ok(None)
                 }
             }
-            Err(_) => Err(anyhow::anyhow!("Failed to fetch Bitbucket Cloud PRs")),
+            Err(_) => Err(Error::provider("Failed to fetch Bitbucket Cloud PRs")),
         }
     } else {
         Ok(None)
@@ -110,7 +109,7 @@ async fn fetch_bitbucket_data_center_pr(
                     Ok(None)
                 }
             }
-            Err(_) => Err(anyhow::anyhow!("Failed to fetch Bitbucket Data Center PRs")),
+            Err(_) => Err(Error::provider("Failed to fetch Bitbucket Data Center PRs")),
         }
     } else {
         Ok(None)

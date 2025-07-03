@@ -1,5 +1,6 @@
-use anyhow::Result;
 use std::env;
+
+use crate::error::{Error, Result};
 
 const TOKEN_ENV_VAR: &str = "BITBUCKET_DATA_CENTER_HTTP_ACCESS_TOKEN";
 
@@ -13,19 +14,19 @@ impl BitbucketDataCenterAuth {
     pub fn get_token(&self) -> Result<String> {
         env::var(TOKEN_ENV_VAR)
             .map_err(|_| {
-                anyhow::anyhow!(
+                Error::auth(format!(
                     "No Bitbucket Data Center access token found. Please set the {} environment variable.\n\
                 Run 'gwt auth bitbucket-data-center setup' for instructions.",
                     TOKEN_ENV_VAR
-                )
+                ))
             })
             .and_then(|token| {
                 if token.is_empty() {
-                    Err(anyhow::anyhow!(
+                    Err(Error::auth(format!(
                         "Bitbucket Data Center access token is empty. Please set the {} environment variable.\n\
                         Run 'gwt auth bitbucket-data-center setup' for instructions.",
                         TOKEN_ENV_VAR
-                    ))
+                    )))
                 } else {
                     Ok(token)
                 }
@@ -63,14 +64,14 @@ pub fn get_auth_from_config() -> Result<(String, String, String)> {
     use crate::github;
 
     let (_, config) =
-        GitWorktreeConfig::find_config()?.ok_or_else(|| anyhow::anyhow!("No git-worktree-config.yaml found"))?;
+        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.yaml found"))?;
 
     // Check sourceControl field instead of URL pattern
     if config.source_control != "bitbucket-data-center" {
-        return Err(anyhow::anyhow!(
+        return Err(Error::provider(format!(
             "Repository is not configured for Bitbucket Data Center (sourceControl: {})",
             config.source_control
-        ));
+        )));
     }
 
     let repo_url = &config.repository_url;
@@ -87,13 +88,13 @@ pub fn get_auth_from_config() -> Result<(String, String, String)> {
             return Ok((base_url, owner, repo));
         }
 
-        return Err(anyhow::anyhow!(
+        return Err(Error::provider(format!(
             "Failed to derive Bitbucket Data Center base URL from: {}",
             repo_url
-        ));
+        )));
     }
 
-    Err(anyhow::anyhow!("Failed to parse repository URL: {}", repo_url))
+    Err(Error::provider(format!("Failed to parse repository URL: {}", repo_url)))
 }
 
 pub fn display_setup_instructions() {

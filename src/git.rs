@@ -1,7 +1,8 @@
-use anyhow::{bail, Context, Result};
 use colored::Colorize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+use crate::error::{Error, Result};
 
 /// Execute a git command with real-time output streaming
 pub fn execute_streaming(args: &[&str], cwd: Option<&Path>) -> Result<()> {
@@ -12,10 +13,10 @@ pub fn execute_streaming(args: &[&str], cwd: Option<&Path>) -> Result<()> {
         cmd.current_dir(dir);
     }
 
-    let status = cmd.status().context("Failed to execute git command")?;
+    let status = cmd.status().map_err(|e| Error::git(format!("Failed to execute git command: {}", e)))?;
 
     if !status.success() {
-        bail!("Git command failed with exit code: {:?}", status.code());
+        return Err(Error::git(format!("Git command failed with exit code: {:?}", status.code())));
     }
 
     Ok(())
@@ -30,11 +31,11 @@ pub fn execute_capture(args: &[&str], cwd: Option<&Path>) -> Result<String> {
         cmd.current_dir(dir);
     }
 
-    let output = cmd.output().context("Failed to execute git command")?;
+    let output = cmd.output().map_err(|e| Error::git(format!("Failed to execute git command: {}", e)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Git command failed: {}", stderr);
+        return Err(Error::git(format!("Git command failed: {}", stderr)));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

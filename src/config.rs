@@ -1,10 +1,10 @@
-use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cli::Provider;
+use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,17 +51,17 @@ impl GitWorktreeConfig {
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        let yaml_string = serde_yaml::to_string(self).context("Failed to serialize config to YAML")?;
+        let yaml_string = serde_yaml::to_string(self)?;
 
-        fs::write(path, yaml_string).context("Failed to write config file")?;
+        fs::write(path, yaml_string).map_err(|e| Error::config(format!("Failed to write config file: {}", e)))?;
 
         Ok(())
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path).context("Failed to read config file")?;
+        let content = fs::read_to_string(path).map_err(|e| Error::config(format!("Failed to read config file: {}", e)))?;
 
-        let config: Self = serde_yaml::from_str(&content).context("Failed to parse YAML config")?;
+        let config: Self = serde_yaml::from_str(&content)?;
 
         Ok(config)
     }

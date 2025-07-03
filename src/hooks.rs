@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
 use colored::Colorize;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 use crate::config::GitWorktreeConfig;
+use crate::error::{Error, Result};
 
 pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&str, &str)]) -> Result<()> {
     // Find the config file
@@ -77,10 +77,10 @@ fn execute_command_streaming(command: &str, working_directory: &Path) -> Result<
         .stderr(Stdio::inherit())
         .env("FORCE_COLOR", "1");
 
-    let status = cmd.status().context("Failed to execute hook command")?;
+    let status = cmd.status().map_err(|e| Error::hook(format!("Failed to execute hook command: {}", e)))?;
 
     if !status.success() {
-        anyhow::bail!("Command failed with exit code: {:?}", status.code());
+        return Err(Error::hook(format!("Command failed with exit code: {:?}", status.code())));
     }
 
     Ok(())

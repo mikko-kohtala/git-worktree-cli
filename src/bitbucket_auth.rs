@@ -1,6 +1,7 @@
-use anyhow::{Context, Result};
 use keyring::Entry;
 use std::env;
+
+use crate::error::{Error, Result};
 
 const SERVICE_NAME: &str = "git-worktree-cli-bitbucket";
 const EMAIL_ENV_VAR: &str = "BITBUCKET_CLOUD_EMAIL";
@@ -16,7 +17,7 @@ impl BitbucketAuth {
         // Use workspace/repo as the key identifier for better isolation
         let key_id = format!("{}/{}", workspace, repo);
         let token_entry =
-            Entry::new(SERVICE_NAME, &key_id).context("Failed to create keyring entry for Bitbucket token")?;
+            Entry::new(SERVICE_NAME, &key_id)?;
 
         Ok(BitbucketAuth { email, token_entry })
     }
@@ -30,11 +31,11 @@ impl BitbucketAuth {
         }
 
         // Then check keyring
-        self.token_entry.get_password().context(format!(
+        self.token_entry.get_password().map_err(|_| Error::auth(format!(
             "No Bitbucket Cloud API token found. Please set the {} and {} environment variables.\n\
                 Run 'gwt auth bitbucket-cloud setup' for instructions.",
             EMAIL_ENV_VAR, TOKEN_ENV_VAR
-        ))
+        )))
     }
 
     pub fn email(&self) -> Option<String> {
@@ -66,14 +67,14 @@ pub fn get_auth_from_config() -> Result<(String, String, Option<String>)> {
     use crate::config::GitWorktreeConfig;
 
     let (_, config) =
-        GitWorktreeConfig::find_config()?.ok_or_else(|| anyhow::anyhow!("No git-worktree-config.yaml found"))?;
+        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.yaml found"))?;
 
     if !config.repository_url.contains("bitbucket.org") {
-        return Err(anyhow::anyhow!("This is not a Bitbucket repository"));
+        return Err(Error::provider("This is not a Bitbucket repository"));
     }
 
     let (workspace, repo) = extract_bitbucket_info_from_url(&config.repository_url)
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse Bitbucket repository URL"))?;
+        .ok_or_else(|| Error::provider("Failed to parse Bitbucket repository URL"))?;
 
     Ok((workspace, repo, config.bitbucket_email))
 }

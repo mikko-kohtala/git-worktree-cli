@@ -86,7 +86,7 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
             // If no main branch, use any other worktree
             worktrees.iter().find(|wt| wt.path != target_worktree.path)
         })
-        .ok_or_else(|| anyhow::anyhow!("No other worktrees found to execute git command from."))?;
+        .ok_or_else(|| Error::msg("No other worktrees found to execute git command from."))?;
 
     // Remove the worktree
     println!("\n{}", "Removing worktree...".cyan());
