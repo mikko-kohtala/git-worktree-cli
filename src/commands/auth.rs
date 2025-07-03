@@ -2,8 +2,8 @@ use crate::bitbucket_api::BitbucketClient;
 use crate::bitbucket_auth::{self, BitbucketAuth};
 use crate::bitbucket_data_center_api::BitbucketDataCenterClient;
 use crate::bitbucket_data_center_auth::{self, BitbucketDataCenterAuth};
+use crate::error::Result;
 use crate::github::GitHubClient;
-use anyhow::Result;
 
 pub fn run() -> Result<()> {
     let client = GitHubClient::new();

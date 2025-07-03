@@ -44,6 +44,18 @@ pub enum Error {
     #[error("Authentication error: {0}")]
     Auth(String),
 
+    /// Network/HTTP request errors
+    #[error("Network error: {0}")]
+    Network(String),
+
+    /// JSON parsing errors
+    #[error("JSON parsing error: {0}")]
+    Json(String),
+
+    /// Regex compilation errors
+    #[error("Regex error: {0}")]
+    Regex(#[from] regex::Error),
+
     /// Generic errors with context
     #[error("{0}")]
     Other(String),
@@ -73,6 +85,26 @@ impl Error {
     pub fn branch<S: Into<String>>(msg: S) -> Self {
         Error::Branch(msg.into())
     }
+
+    /// Create a hook error
+    pub fn hook<S: Into<String>>(msg: S) -> Self {
+        Error::Hook(msg.into())
+    }
+
+    /// Create an auth error
+    pub fn auth<S: Into<String>>(msg: S) -> Self {
+        Error::Auth(msg.into())
+    }
+
+    /// Create a provider error
+    pub fn provider<S: Into<String>>(msg: S) -> Self {
+        Error::Provider(msg.into())
+    }
+
+    /// Create a network error
+    pub fn network<S: Into<String>>(msg: S) -> Self {
+        Error::Network(msg.into())
+    }
 }
 
 // Helper implementations for common conversions
@@ -82,14 +114,32 @@ impl From<serde_yaml::Error> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Json(err.to_string())
+    }
+}
+
 impl From<keyring::Error> for Error {
     fn from(err: keyring::Error) -> Self {
         Error::Auth(err.to_string())
     }
 }
 
-impl From<anyhow::Error> for Error {
-    fn from(err: anyhow::Error) -> Self {
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error::Network(err.to_string())
+    }
+}
+
+impl From<std::env::VarError> for Error {
+    fn from(err: std::env::VarError) -> Self {
+        Error::Other(err.to_string())
+    }
+}
+
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(err: std::string::FromUtf8Error) -> Self {
         Error::Other(err.to_string())
     }
 }

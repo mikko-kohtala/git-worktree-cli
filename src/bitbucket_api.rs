@@ -1,9 +1,9 @@
-use anyhow::{Context, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::bitbucket_auth::BitbucketAuth;
+use crate::error::{Error, Result};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BitbucketUser {
@@ -84,31 +84,31 @@ impl BitbucketClient {
             .header("Accept", "application/json")
             .send()
             .await
-            .context("Failed to send request to Bitbucket API")?;
+            .map_err(|e| Error::network(format!("Failed to send request to Bitbucket API: {}", e)))?;
 
         if response.status().is_client_error() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
 
             if status == 401 {
-                return Err(anyhow::anyhow!(
+                return Err(Error::auth(
                     "Authentication failed. Please check your Bitbucket credentials and run 'gwt auth bitbucket' to update them."
                 ));
             } else if status == 404 {
-                return Err(anyhow::anyhow!(
+                return Err(Error::provider(format!(
                     "Repository not found: {}/{}. Please check the workspace and repository name.",
                     workspace,
                     repo_slug
-                ));
+                )));
             } else {
-                return Err(anyhow::anyhow!("API request failed with status {}: {}", status, text));
+                return Err(Error::provider(format!("API request failed with status {}: {}", status, text)));
             }
         }
 
         let pr_response: BitbucketPullRequestsResponse = response
             .json()
             .await
-            .context("Failed to parse Bitbucket API response")?;
+            .map_err(|e| Error::provider(format!("Failed to parse Bitbucket API response: {}", e)))?;
 
         Ok(pr_response.values)
     }
@@ -124,7 +124,7 @@ impl BitbucketClient {
             .header("Accept", "application/json")
             .send()
             .await
-            .context("Failed to test Bitbucket API connection")?;
+            .map_err(|e| Error::network(format!("Failed to test Bitbucket API connection: {}", e)))?;
 
         if response.status().is_success() {
             println!("✓ Bitbucket API connection successful");
@@ -132,11 +132,11 @@ impl BitbucketClient {
         } else {
             let status = response.status();
             if status == 401 {
-                Err(anyhow::anyhow!(
+                Err(Error::auth(
                     "Authentication failed. Please check your Bitbucket credentials."
                 ))
             } else {
-                Err(anyhow::anyhow!("API connection failed with status: {}", status))
+                Err(Error::provider(format!("API connection failed with status: {}", status)))
             }
         }
     }

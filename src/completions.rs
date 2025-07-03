@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Result};
 use clap_complete::Shell;
 use colored::Colorize;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use crate::error::{Error, Result};
 
 // Include the generated completion files at compile time
 const BASH_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completions/gwt.bash"));
@@ -50,7 +51,7 @@ pub fn detect_shell() -> Result<Shell> {
 }
 
 pub fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
-    let home = env::var("HOME").map_err(|_| anyhow!("Could not determine home directory"))?;
+    let home = env::var("HOME").map_err(|_| Error::msg("Could not determine home directory"))?;
 
     match shell {
         Shell::Bash => {
@@ -86,7 +87,7 @@ pub fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
             Ok(profile_path)
         }
         Shell::Elvish => Ok(PathBuf::from(&home).join(".elvish/lib/gwt-completions.elv")),
-        _ => Err(anyhow!("Unsupported shell: {:?}", shell)),
+        _ => Err(Error::msg(format!("Unsupported shell: {:?}", shell))),
     }
 }
 

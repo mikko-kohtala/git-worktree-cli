@@ -1,5 +1,6 @@
-use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PullRequest {
@@ -60,16 +61,16 @@ impl GitHubClient {
                 "number,title,state,url,isDraft",
             ])
             .output()
-            .context("Failed to execute gh command")?;
+            .map_err(|e| Error::provider(format!("Failed to execute gh command: {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
-                return Err(anyhow!(
+                return Err(Error::auth(
                     "GitHub authentication failed. Run 'gh auth login' to authenticate."
                 ));
             }
-            return Err(anyhow!("Failed to fetch pull requests: {}", stderr));
+            return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
         }
 
         let stdout = String::from_utf8(output.stdout)?;
@@ -78,7 +79,7 @@ impl GitHubClient {
         }
 
         let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).context("Failed to parse pull requests from gh output")?;
+            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()
@@ -108,16 +109,16 @@ impl GitHubClient {
                 "100",
             ])
             .output()
-            .context("Failed to execute gh command")?;
+            .map_err(|e| Error::provider(format!("Failed to execute gh command: {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
-                return Err(anyhow!(
+                return Err(Error::auth(
                     "GitHub authentication failed. Run 'gh auth login' to authenticate."
                 ));
             }
-            return Err(anyhow!("Failed to fetch pull requests: {}", stderr));
+            return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
         }
 
         let stdout = String::from_utf8(output.stdout)?;
@@ -126,7 +127,7 @@ impl GitHubClient {
         }
 
         let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).context("Failed to parse pull requests from gh output")?;
+            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()
