@@ -1,5 +1,7 @@
 # Git Worktree CLI (gwt)
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mikko-kohtala/git-worktree-cli)
+
 🌿 **Enhanced Git Worktree Management with Rust** 🌿
 
 Stop juggling multiple git clones or constantly switching branches. Git worktrees let you have multiple working directories from the same repository, each checked out to different branches. This Rust-powered tool makes managing them effortless with **real-time streaming output**.
