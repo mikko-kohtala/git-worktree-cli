@@ -31,4 +31,4 @@ pub const GIT_EXTENSION: &str = ".git";
 
 /// Configuration file
 #[allow(dead_code)]
-pub const CONFIG_FILE_NAME: &str = "git-worktree-config.yaml";
+pub const CONFIG_FILE_NAME: &str = "git-worktree-config.jsonc";

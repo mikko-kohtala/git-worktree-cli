@@ -64,7 +64,7 @@ pub fn get_auth_from_config() -> Result<(String, String, String)> {
     use crate::github;
 
     let (_, config) =
-        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.yaml found"))?;
+        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.jsonc found"))?;
 
     // Check sourceControl field instead of URL pattern
     if config.source_control != "bitbucket-data-center" {

@@ -71,7 +71,7 @@ This project is a **single Rust binary** that provides git worktree management f
 
 ## Hooks System
 
-The project includes a flexible hooks system that allows users to run custom commands after various worktree operations. Hooks are defined in the `git-worktree-config.yaml` file and support variable substitution.
+The project includes a flexible hooks system that allows users to run custom commands after various worktree operations. Hooks are defined in the `git-worktree-config.jsonc` file and support variable substitution.
 
 ### Available Hooks
 
@@ -86,28 +86,34 @@ Hooks support the following variables:
 
 ### Default Configuration
 
-When `gwtinit` creates a new project, it generates a `git-worktree-config.yaml` with all hooks **commented out by default**:
+When `gwt init` creates a new project, it generates a `git-worktree-config.jsonc` with empty hooks arrays by default:
 
-```yaml
-hooks:
-  postAdd:
-    - "# npm install"
-  postRemove:
-    - "# echo 'Removed worktree for branch ${branchName}'"
+```jsonc
+{
+  "hooks": {
+    "postAdd": [],
+    "postRemove": []
+  }
+}
 ```
 
 ### Active Configuration Example
 
-To enable hooks, simply remove the `#` comments:
+To enable hooks, add commands to the arrays:
 
-```yaml
-hooks:
-  postAdd:
-    - "echo 'Created worktree for ${branchName} at ${worktreePath}'"
-    - "npm install"
-    - "npm run init"
-  postRemove:
-    - "echo 'Removed worktree for branch ${branchName}'"
+```jsonc
+{
+  "hooks": {
+    "postAdd": [
+      "echo 'Created worktree for ${branchName} at ${worktreePath}'",
+      "npm install",
+      "npm run init"
+    ],
+    "postRemove": [
+      "echo 'Removed worktree for branch ${branchName}'"
+    ]
+  }
+}
 ```
 
 ### Hook Behavior
@@ -116,26 +122,31 @@ hooks:
 - **Execution context**: 
   - `postAdd`: Execute in the worktree directory
   - `postRemove`: Execute in the project root directory
-- **Comment handling**: Lines starting with `#` are automatically skipped
+- **Comment handling**: Use JSONC comments (`//` or `/* */`) outside of strings
 - **Error handling**: Failed hooks show warnings but don't stop execution
 - **Sequential execution**: Hooks run in the order they're defined
 - **Environment**: Hooks inherit the current environment with `FORCE_COLOR: '1'` for colored output
 
 ### Common Hook Patterns
 
-```yaml
-hooks:
-  postAdd:
-    - "npm install"                    # Install dependencies
-    - "npm run build"                  # Build project
-    - "code ."                         # Open in VS Code
-  postRemove:
-    - "echo 'Cleaned up ${branchName}'" # Log cleanup
+```jsonc
+{
+  "hooks": {
+    "postAdd": [
+      "npm install",                    // Install dependencies
+      "npm run build",                  // Build project
+      "code ."                          // Open in VS Code
+    ],
+    "postRemove": [
+      "echo 'Cleaned up ${branchName}'"  // Log cleanup
+    ]
+  }
+}
 ```
 
 ### Troubleshooting Hooks
 
-- **Hook not executing**: Check if the line starts with `#` (commented out)
+- **Hook not executing**: Check that the hook command is in the array
 - **No output visible**: Hooks use real-time streaming - output should appear immediately
 - **Hook fails**: Check the command syntax and file permissions
 - **Variable not substituted**: Ensure correct syntax: `${branchName}` or `${worktreePath}`
@@ -148,7 +159,7 @@ hooks:
    - ✅ Clones repository with **real-time streaming output** (major improvement!)
    - ✅ Detects the default branch name
    - ✅ Renames the cloned directory to match the branch name
-   - ✅ Creates `git-worktree-config.yaml` with repository metadata
+   - ✅ Creates `git-worktree-config.jsonc` with repository metadata
 
 2. **`gwt list`**: Display all worktrees in a formatted table ✅
    - ✅ Finds worktrees in project directory

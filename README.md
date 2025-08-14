@@ -98,7 +98,7 @@ gwt init https://bitbucket.company.com/scm/proj/repo.git --provider bitbucket-da
 
 # This creates:
 # - main/ directory (or master/ based on default branch)
-# - git-worktree-config.yaml (project metadata with provider info)
+# - git-worktree-config.jsonc (project metadata with provider info)
 # You'll see git clone progress in real-time!
 ```
 
@@ -205,7 +205,7 @@ Git worktree scripts support **hooks** - custom commands that run automatically 
 
 ### Quick Setup
 ```bash
-# After gwt init, edit git-worktree-config.yaml
+# After gwt init, edit git-worktree-config.jsonc
 hooks:
   postAdd:
     - "npm install"      # Auto-install deps in new worktrees
@@ -217,7 +217,7 @@ hooks:
 # Initialize project (creates config with hook examples)
 gwt init git@github.com:company/web-app.git
 
-# Edit git-worktree-config.yaml to enable hooks:
+# Edit git-worktree-config.jsonc to enable hooks:
 # hooks:
 #   postAdd:
 #     - "npm install"    # Remove # to enable

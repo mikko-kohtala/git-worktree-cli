@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 /// Represents a git worktree project with its root and git directory
 #[derive(Debug, Clone)]
 pub struct Project {
-    /// The root directory containing git-worktree-config.yaml
+    /// The root directory containing git-worktree-config.jsonc
     pub root: PathBuf,
     /// The .git directory path
     pub git_dir: PathBuf,
@@ -37,7 +37,7 @@ impl Project {
     }
 }
 
-/// Find the project root containing git-worktree-config.yaml
+/// Find the project root containing git-worktree-config.jsonc
 pub fn find_project_root() -> Result<PathBuf> {
     let current_dir = std::env::current_dir().map_err(Error::Io)?;
     find_project_root_from(&current_dir)
@@ -48,7 +48,7 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     let mut search_path = start_path.to_path_buf();
 
     loop {
-        if search_path.join("git-worktree-config.yaml").exists() {
+        if search_path.join("git-worktree-config.jsonc").exists() {
             return Ok(search_path);
         }
 
@@ -60,7 +60,7 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     // Check if we're in a git repository but missing config
     if let Ok(Some(_)) = crate::git::get_git_root() {
         Err(Error::Other(
-            "Found git repository but no git-worktree-config.yaml. This doesn't appear to be a worktree project."
+            "Found git repository but no git-worktree-config.jsonc. This doesn't appear to be a worktree project."
                 .to_string(),
         ))
     } else {

@@ -104,6 +104,9 @@ pub enum Commands {
     Remove {
         /// Branch name to remove (current worktree if not specified)
         branch_name: Option<String>,
+        /// Skip confirmation prompts
+        #[arg(short, long)]
+        force: bool,
     },
 
     /// Manage authentication for external services

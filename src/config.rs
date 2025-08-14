@@ -44,16 +44,16 @@ impl GitWorktreeConfig {
             source_control,
             bitbucket_email: None,
             hooks: Some(Hooks {
-                post_add: Some(vec!["# npm install".to_string()]),
-                post_remove: Some(vec!["# echo 'Removed worktree for branch ${branchName}'".to_string()]),
+                post_add: Some(vec![]),
+                post_remove: Some(vec![]),
             }),
         }
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
-        let yaml_string = serde_yaml::to_string(self)?;
+        let json_string = serde_json::to_string_pretty(self)?;
 
-        fs::write(path, yaml_string).map_err(|e| Error::config(format!("Failed to write config file: {}", e)))?;
+        fs::write(path, json_string).map_err(|e| Error::config(format!("Failed to write config file: {}", e)))?;
 
         Ok(())
     }
@@ -61,7 +61,7 @@ impl GitWorktreeConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let content = fs::read_to_string(path).map_err(|e| Error::config(format!("Failed to read config file: {}", e)))?;
 
-        let config: Self = serde_yaml::from_str(&content)?;
+        let config: Self = json5::from_str(&content)?;
 
         Ok(config)
     }
@@ -70,7 +70,7 @@ impl GitWorktreeConfig {
         let mut current_dir = std::env::current_dir()?;
 
         loop {
-            let config_path = current_dir.join("git-worktree-config.yaml");
+            let config_path = current_dir.join("git-worktree-config.jsonc");
             if config_path.exists() {
                 let config = Self::load(&config_path)?;
                 return Ok(Some((config_path, config)));
@@ -85,7 +85,7 @@ impl GitWorktreeConfig {
     }
 }
 
-pub const CONFIG_FILENAME: &str = "git-worktree-config.yaml";
+pub const CONFIG_FILENAME: &str = "git-worktree-config.jsonc";
 
 #[cfg(test)]
 mod tests {
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn test_config_save_and_load() {
         let temp_dir = tempdir().unwrap();
-        let config_path = temp_dir.path().join("test-config.yaml");
+        let config_path = temp_dir.path().join("test-config.jsonc");
 
         let original_config = GitWorktreeConfig::new(
             "git@github.com:test/repo.git".to_string(),

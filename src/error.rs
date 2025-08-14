@@ -108,8 +108,8 @@ impl Error {
 }
 
 // Helper implementations for common conversions
-impl From<serde_yaml::Error> for Error {
-    fn from(err: serde_yaml::Error) -> Self {
+impl From<json5::Error> for Error {
+    fn from(err: json5::Error) -> Self {
         Error::Config(err.to_string())
     }
 }
