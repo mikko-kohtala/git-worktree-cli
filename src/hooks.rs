@@ -38,12 +38,6 @@ pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&s
     println!("{}", format!("🪝 Running {} hooks...", hook_type).cyan());
 
     for hook in hook_commands {
-        // Skip commented lines
-        if hook.trim().starts_with('#') {
-            println!("   {}", format!("Skipping commented hook: {}", hook).yellow());
-            continue;
-        }
-
         // Replace variables in the hook command
         let mut command = hook.clone();
         for (var_name, var_value) in variables {

@@ -149,7 +149,7 @@ Temporary Items
 .apdisk
 
 # Git worktree configuration
-git-worktree-config.yaml
+git-worktree-config.jsonc
 
 # Test directories
 test-temp/

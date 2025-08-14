@@ -67,7 +67,7 @@ pub fn get_auth_from_config() -> Result<(String, String, Option<String>)> {
     use crate::config::GitWorktreeConfig;
 
     let (_, config) =
-        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.yaml found"))?;
+        GitWorktreeConfig::find_config()?.ok_or_else(|| Error::config("No git-worktree-config.jsonc found"))?;
 
     if !config.repository_url.contains("bitbucket.org") {
         return Err(Error::provider("This is not a Bitbucket repository"));

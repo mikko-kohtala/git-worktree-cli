@@ -30,7 +30,7 @@ fn test_gwt_init_with_valid_repo() {
         .stdout(predicate::str::contains("✓ Config saved to:"));
 
     // Check that files were created
-    let config_path = temp_path.join("git-worktree-config.yaml");
+    let config_path = temp_path.join("git-worktree-config.jsonc");
     assert!(config_path.exists(), "Config file should be created");
 
     // Check that the main branch directory was created
@@ -52,10 +52,10 @@ fn test_gwt_init_with_valid_repo() {
 
     // Verify config file content
     let config_content = fs::read_to_string(&config_path).unwrap();
-    assert!(config_content.contains("repositoryUrl: https://github.com/pitkane/git-worktree-cli.git"));
-    assert!(config_content.contains("mainBranch:"));
-    assert!(config_content.contains("createdAt:"));
-    assert!(config_content.contains("hooks:"));
+    assert!(config_content.contains("\"repositoryUrl\": \"https://github.com/pitkane/git-worktree-cli.git\""));
+    assert!(config_content.contains("\"mainBranch\":"));
+    assert!(config_content.contains("\"createdAt\":"));
+    assert!(config_content.contains("\"hooks\":"));
 
     cleanup_test_env(temp_dir);
 }
@@ -74,7 +74,7 @@ fn test_gwt_init_with_invalid_repo() {
     cmd.assert().failure();
 
     // Config file should not be created
-    let config_path = temp_path.join("git-worktree-config.yaml");
+    let config_path = temp_path.join("git-worktree-config.jsonc");
     assert!(!config_path.exists(), "Config file should not be created on failure");
 
     cleanup_test_env(temp_dir);

@@ -8,7 +8,7 @@ use crate::{
     git, hooks,
 };
 
-pub fn run(branch_name: Option<&str>) -> Result<()> {
+pub fn run(branch_name: Option<&str>, force: bool) -> Result<()> {
     // Find a git directory to work with
     let git_dir = find_git_directory()?;
 
@@ -46,17 +46,19 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
         );
     }
 
-    // Ask for confirmation
-    print!("\n{}", "Are you sure you want to remove this worktree? (y/N): ".cyan());
-    io::stdout().flush()?;
+    // Ask for confirmation unless --force is used
+    if !force {
+        print!("\n{}", "Are you sure you want to remove this worktree? (y/N): ".cyan());
+        io::stdout().flush()?;
 
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    let confirmation = input.trim().to_lowercase();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let confirmation = input.trim().to_lowercase();
 
-    if confirmation != "y" && confirmation != "yes" {
-        println!("{}", "Removal cancelled.".yellow());
-        return Ok(());
+        if confirmation != "y" && confirmation != "yes" {
+            println!("{}", "Removal cancelled.".yellow());
+            return Ok(());
+        }
     }
 
     // Find project root from the worktree being removed (go up one level)
@@ -115,15 +117,20 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
                         format!("⚠️  Branch '{}' has unmerged changes", branch_display).yellow()
                     );
 
-                    // Ask for confirmation to force delete
-                    print!("{}", "Force delete the branch? (y/N): ".cyan());
-                    io::stdout().flush()?;
+                    // Ask for confirmation to force delete unless --force is used
+                    let should_force_delete = if force {
+                        true
+                    } else {
+                        print!("{}", "Force delete the branch? (y/N): ".cyan());
+                        io::stdout().flush()?;
 
-                    let mut input = String::new();
-                    io::stdin().read_line(&mut input)?;
-                    let force_delete = input.trim().to_lowercase();
+                        let mut input = String::new();
+                        io::stdin().read_line(&mut input)?;
+                        let force_delete = input.trim().to_lowercase();
+                        force_delete == "y" || force_delete == "yes"
+                    };
 
-                    if force_delete == "y" || force_delete == "yes" {
+                    if should_force_delete {
                         match git::execute_streaming(&["branch", "-D", branch_display], Some(&git_working_dir.path)) {
                             Ok(_) => {
                                 println!("{}", format!("✓ Branch force deleted: {}", branch_display).green());

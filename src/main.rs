@@ -21,8 +21,8 @@ fn main() -> Result<()> {
         Commands::List { local } => {
             list::run(local)?;
         }
-        Commands::Remove { branch_name } => {
-            remove::run(branch_name.as_deref())?;
+        Commands::Remove { branch_name, force } => {
+            remove::run(branch_name.as_deref(), force)?;
         }
         Commands::Auth { action } => match action {
             AuthAction::Github => {

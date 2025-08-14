@@ -30,19 +30,20 @@ pub fn cleanup_test_env(temp_dir: TempDir) {
 #[allow(dead_code)]
 pub fn create_test_config(dir: &std::path::Path, repo_url: &str, main_branch: &str) -> PathBuf {
     let config_content = format!(
-        r#"repositoryUrl: {}
-mainBranch: {}
-createdAt: 2025-06-25T17:25:28.766876Z
-hooks:
-  postAdd:
-  - '# npm install'
-  postRemove:
-  - '# echo ''Removed worktree for branch ${{branchName}}'''
-"#,
+        r#"{{
+  "repositoryUrl": "{}",
+  "mainBranch": "{}",
+  "createdAt": "2025-06-25T17:25:28.766876Z",
+  "sourceControl": "github",
+  "hooks": {{
+    "postAdd": [],
+    "postRemove": []
+  }}
+}}"#,
         repo_url, main_branch
     );
 
-    let config_path = dir.join("git-worktree-config.yaml");
+    let config_path = dir.join("git-worktree-config.jsonc");
     fs::write(&config_path, config_content).expect("Failed to write test config");
     config_path
 }

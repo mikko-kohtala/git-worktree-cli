@@ -110,7 +110,7 @@ fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
 }
 
 fn get_main_branch(project_root: &Path) -> Result<String> {
-    let config_path = project_root.join("git-worktree-config.yaml");
+    let config_path = project_root.join("git-worktree-config.jsonc");
     if config_path.exists() {
         let config = GitWorktreeConfig::load(&config_path)?;
         Ok(config.main_branch)
