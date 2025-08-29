@@ -27,6 +27,13 @@ When Claude needs to test functionality locally:
   cd .. && rm -rf test-temp
   ```
 
+## Version Management
+
+**IMPORTANT**: Whenever making code changes, always increment the version in Cargo.toml:
+- Patch version (x.x.N) for bug fixes and minor improvements
+- Minor version (x.N.x) for new features
+- Major version (N.x.x) for breaking changes
+
 ### Git Worktree Tool (gwt)
 - **Initialize project**: `gwt init <repository-url>` - Initialize a new worktree project from a repository URL
 - **Add worktree**: `gwt add <branch-name>` - Create new worktrees from branch names  

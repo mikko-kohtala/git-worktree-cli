@@ -25,6 +25,13 @@ pub fn run(branch_name: &str) -> Result<()> {
     // Get main branch from config
     let main_branch = get_main_branch(&project_root)?;
 
+    // Fetch latest changes from origin to ensure we have the latest remote state
+    println!("{}", "Fetching latest changes from origin...".cyan());
+    git::execute_streaming(
+        &["fetch", "origin"],
+        Some(&git_working_dir),
+    )?;
+
     // Check if branch exists locally or remotely
     let (local_exists, remote_exists) = git::branch_exists(&git_working_dir, branch_name)?;
 
