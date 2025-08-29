@@ -68,6 +68,16 @@ pub fn run(branch_name: Option<&str>, force: bool) -> Result<()> {
         find_project_root_from(&target_worktree.path)?
     };
 
+    // Execute pre-remove hooks before any removal operations (run from worktree directory)
+    hooks::execute_hooks(
+        "preRemove",
+        &target_worktree.path,
+        &[
+            ("branchName", &branch_display),
+            ("worktreePath", target_worktree.path.to_str().unwrap()),
+        ],
+    )?;
+
     // Find another worktree to run git commands from
     let main_branches = constants::PROTECTED_BRANCHES;
     let git_working_dir = worktrees

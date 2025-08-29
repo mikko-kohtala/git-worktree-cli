@@ -1,6 +1,6 @@
 [package]
 name = "git-worktree-cli"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Mikko Kohtala"]
 description = "A tool for managing git worktrees efficiently"

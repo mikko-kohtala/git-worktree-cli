@@ -22,6 +22,7 @@ pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&s
 
     let hook_commands = match hook_type {
         "postAdd" => &hooks.post_add,
+        "preRemove" => &hooks.pre_remove,
         "postRemove" => &hooks.post_remove,
         _ => return Ok(()),
     };

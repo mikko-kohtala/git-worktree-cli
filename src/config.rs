@@ -25,6 +25,8 @@ pub struct Hooks {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub post_add: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub pre_remove: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub post_remove: Option<Vec<String>>,
 }
 
@@ -45,6 +47,7 @@ impl GitWorktreeConfig {
             bitbucket_email: None,
             hooks: Some(Hooks {
                 post_add: Some(vec![]),
+                pre_remove: Some(vec![]),
                 post_remove: Some(vec![]),
             }),
         }
@@ -108,6 +111,7 @@ mod tests {
 
         let hooks = config.hooks.unwrap();
         assert!(hooks.post_add.is_some());
+        assert!(hooks.pre_remove.is_some());
         assert!(hooks.post_remove.is_some());
     }
 
