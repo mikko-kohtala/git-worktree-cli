@@ -93,7 +93,7 @@ pub fn find_git_directory_from(project_root: &Path) -> Result<PathBuf> {
 }
 
 /// Find an existing git directory (worktree or main repository)
-/// 
+///
 /// This function looks for any directory with a .git file or directory,
 /// prioritizing worktrees (where .git is a file) over main repositories.
 pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
@@ -106,7 +106,7 @@ pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
         if entry.file_type().map_err(Error::Io)?.is_dir() {
             let dir_path = entry.path();
             let git_path = dir_path.join(".git");
-            
+
             if git_path.exists() {
                 if git_path.is_file() {
                     // This is a worktree - prefer these over main repos

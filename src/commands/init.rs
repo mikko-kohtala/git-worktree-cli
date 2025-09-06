@@ -20,7 +20,8 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
 
     // Remove existing clone directory if it exists
     if Path::new(&repo_name).exists() {
-        fs::remove_dir_all(&repo_name).map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
+        fs::remove_dir_all(&repo_name)
+            .map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
     // Clone the repository with streaming output (this is the key improvement!)
@@ -28,12 +29,14 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
 
     // Get the default branch name
     let repo_path = PathBuf::from(&repo_name);
-    let default_branch = git::get_default_branch(&repo_path).map_err(|e| Error::git(format!("Failed to get default branch: {}", e)))?;
+    let default_branch =
+        git::get_default_branch(&repo_path).map_err(|e| Error::git(format!("Failed to get default branch: {}", e)))?;
 
     // Rename directory to match branch name
     let final_dir_name = &default_branch;
     if Path::new(final_dir_name).exists() {
-        fs::remove_dir_all(final_dir_name).map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
+        fs::remove_dir_all(final_dir_name)
+            .map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
     fs::rename(&repo_name, final_dir_name).map_err(|e| Error::msg(format!("Failed to rename directory: {}", e)))?;
@@ -41,7 +44,9 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
     // Create configuration file
     let config = GitWorktreeConfig::new(repo_url.to_string(), default_branch.clone(), detected_provider);
     let config_path = project_root.join(CONFIG_FILENAME);
-    config.save(&config_path).map_err(|e| Error::config(format!("Failed to save configuration: {}", e)))?;
+    config
+        .save(&config_path)
+        .map_err(|e| Error::config(format!("Failed to save configuration: {}", e)))?;
 
     // Print success messages
     println!("{}", format!("✓ Repository cloned to: {}", final_dir_name).green());

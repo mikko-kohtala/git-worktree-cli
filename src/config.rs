@@ -62,7 +62,8 @@ impl GitWorktreeConfig {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let content = fs::read_to_string(path).map_err(|e| Error::config(format!("Failed to read config file: {}", e)))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| Error::config(format!("Failed to read config file: {}", e)))?;
 
         let config: Self = json5::from_str(&content)?;
 

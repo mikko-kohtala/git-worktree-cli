@@ -67,7 +67,7 @@ impl GitHubClient {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
                 return Err(Error::auth(
-                    "GitHub authentication failed. Run 'gh auth login' to authenticate."
+                    "GitHub authentication failed. Run 'gh auth login' to authenticate.",
                 ));
             }
             return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
@@ -78,8 +78,8 @@ impl GitHubClient {
             return Ok(vec![]);
         }
 
-        let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
+        let prs: Vec<serde_json::Value> = serde_json::from_str(&stdout)
+            .map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()
@@ -115,7 +115,7 @@ impl GitHubClient {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
                 return Err(Error::auth(
-                    "GitHub authentication failed. Run 'gh auth login' to authenticate."
+                    "GitHub authentication failed. Run 'gh auth login' to authenticate.",
                 ));
             }
             return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
@@ -126,8 +126,8 @@ impl GitHubClient {
             return Ok(vec![]);
         }
 
-        let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
+        let prs: Vec<serde_json::Value> = serde_json::from_str(&stdout)
+            .map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()

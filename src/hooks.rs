@@ -72,10 +72,15 @@ fn execute_command_streaming(command: &str, working_directory: &Path) -> Result<
         .stderr(Stdio::inherit())
         .env("FORCE_COLOR", "1");
 
-    let status = cmd.status().map_err(|e| Error::hook(format!("Failed to execute hook command: {}", e)))?;
+    let status = cmd
+        .status()
+        .map_err(|e| Error::hook(format!("Failed to execute hook command: {}", e)))?;
 
     if !status.success() {
-        return Err(Error::hook(format!("Command failed with exit code: {:?}", status.code())));
+        return Err(Error::hook(format!(
+            "Command failed with exit code: {:?}",
+            status.code()
+        )));
     }
 
     Ok(())

@@ -3,7 +3,11 @@ name = "git-worktree-cli"
 version = "0.3.1"
 edition = "2021"
 authors = ["Mikko Kohtala"]
-description = "A tool for managing git worktrees efficiently"
+description = "Enhanced git worktree management with real-time streaming output"
+license = "MIT"
+repository = "https://github.com/mikko-kohtala/git-worktree-cli"
+keywords = ["git", "worktree", "cli", "development", "workflow"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "gwt"

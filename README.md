@@ -35,7 +35,7 @@ Each directory is a separate working tree of the same repository. No more stashi
 
 1. **Clone this repository:**
    ```bash
-   git clone git@github.com:pitkane/git-worktree-cli.git ~/.git-worktree-cli
+   git clone https://github.com/mikko-kohtala/git-worktree-cli.git ~/.git-worktree-cli
    cd ~/.git-worktree-cli
    ```
 
@@ -412,4 +412,4 @@ MIT License - see LICENSE file for details
 
 ## History
 
-This project was originally implemented in TypeScript but has been rewritten in Rust for better performance and distribution. The TypeScript version has been removed from the repository but can be found at this point in the project's history: https://github.com/pitkane/git-worktree-cli/tree/1d8b2a2431d302737e21bec6a0f09a77d2bb9cc3
+This project was originally implemented in TypeScript but has been rewritten in Rust for better performance and distribution.
