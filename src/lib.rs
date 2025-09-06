@@ -19,5 +19,6 @@ pub mod github;
 pub mod hooks;
 
 // Re-export commonly used types
-pub use cli::{Cli, Commands};
-pub use error::{Error, Result};
+pub use crate::cli::{Cli, Commands};
+pub use crate::core::*;
+pub use crate::error::{Error, Result};

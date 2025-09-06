@@ -5,7 +5,7 @@ use super::list_helpers::{
 };
 use crate::{
     bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
-    core::project::{clean_branch_name, find_git_directory},
+    core::{clean_branch_name, find_git_directory},
     error::Result,
     git, github,
 };

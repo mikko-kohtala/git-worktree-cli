@@ -4,6 +4,9 @@ version = "0.3.1"
 edition = "2021"
 authors = ["Mikko Kohtala"]
 description = "A tool for managing git worktrees efficiently"
+license = "MIT"
+repository = "https://github.com/mikko-kohtala/git-worktree-cli"
+readme = "README.md"
 
 [[bin]]
 name = "gwt"

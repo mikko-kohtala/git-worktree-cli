@@ -2,7 +2,7 @@ use colored::Colorize;
 use std::path::{Path, PathBuf};
 
 use crate::config::GitWorktreeConfig;
-use crate::core::project::{find_existing_worktree, find_project_root};
+use crate::core::{find_existing_worktree, find_project_root};
 use crate::error::{Error, Result};
 use crate::git;
 use crate::hooks;

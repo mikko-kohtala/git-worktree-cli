@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 use crate::{
     constants,
-    core::project::{clean_branch_name, find_git_directory, find_project_root_from},
+    core::{clean_branch_name, find_git_directory, find_project_root_from},
     error::{Error, Result},
     git, hooks,
 };
