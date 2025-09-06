@@ -97,11 +97,13 @@ impl BitbucketClient {
             } else if status == 404 {
                 return Err(Error::provider(format!(
                     "Repository not found: {}/{}. Please check the workspace and repository name.",
-                    workspace,
-                    repo_slug
+                    workspace, repo_slug
                 )));
             } else {
-                return Err(Error::provider(format!("API request failed with status {}: {}", status, text)));
+                return Err(Error::provider(format!(
+                    "API request failed with status {}: {}",
+                    status, text
+                )));
             }
         }
 
@@ -133,10 +135,13 @@ impl BitbucketClient {
             let status = response.status();
             if status == 401 {
                 Err(Error::auth(
-                    "Authentication failed. Please check your Bitbucket credentials."
+                    "Authentication failed. Please check your Bitbucket credentials.",
                 ))
             } else {
-                Err(Error::provider(format!("API connection failed with status: {}", status)))
+                Err(Error::provider(format!(
+                    "API connection failed with status: {}",
+                    status
+                )))
             }
         }
     }

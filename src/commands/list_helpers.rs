@@ -1,4 +1,8 @@
-use crate::{bitbucket_api, bitbucket_data_center_api, error::{Error, Result}, github};
+use crate::{
+    bitbucket_api, bitbucket_data_center_api,
+    error::{Error, Result},
+    github,
+};
 
 pub struct PullRequestInfo {
     pub url: String,

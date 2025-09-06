@@ -167,11 +167,13 @@ impl BitbucketDataCenterClient {
             } else if status == 404 {
                 return Err(Error::provider(format!(
                     "Repository not found: {}/{}. Please check the project key and repository slug.",
-                    project_key,
-                    repo_slug
+                    project_key, repo_slug
                 )));
             } else {
-                return Err(Error::provider(format!("API request failed with status {}: {}", status, text)));
+                return Err(Error::provider(format!(
+                    "API request failed with status {}: {}",
+                    status, text
+                )));
             }
         }
 
@@ -203,10 +205,13 @@ impl BitbucketDataCenterClient {
             let status = response.status();
             if status == 401 {
                 Err(Error::auth(
-                    "Authentication failed. Please check your Bitbucket Data Center access token."
+                    "Authentication failed. Please check your Bitbucket Data Center access token.",
                 ))
             } else {
-                Err(Error::provider(format!("API connection failed with status: {}", status)))
+                Err(Error::provider(format!(
+                    "API connection failed with status: {}",
+                    status
+                )))
             }
         }
     }
