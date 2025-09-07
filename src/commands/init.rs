@@ -40,7 +40,7 @@ pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()
 
     // Sanitize branch name for use as directory name
     let final_dir_name = default_branch.replace(['/', '\\'], "-");
-    
+
     // Check for existing branch directory
     if Path::new(&final_dir_name).exists() {
         if !force {
