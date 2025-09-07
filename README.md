@@ -176,28 +176,16 @@ gwt remove hotfix/payment-bug
 
 ## Commands Reference
 
-| Command | Description | Example | Status |
-|---------|-------------|---------|---------|
-| `gwt init <url>` | Initialize worktree project from repo | `gwt init git@github.com:user/repo.git` | ✅ **Working** |
-| `gwt list` | List all worktrees in a table | `gwt list` | ✅ **Working** |
-| `gwt add <branch>` | Create new worktree for branch | `gwt add feature/new-ui` | ✅ **Working** |
-| `gwt remove [branch]` | Remove worktree (current if no args) | `gwt remove old-feature` | ✅ **Working** |
-| `gwt completions` | Check completion status | `gwt completions` | ✅ **Working** |
-| `gwt completions install [shell]` | Auto-install completions | `gwt completions install` | ✅ **Working** |
-| `gwt completions generate <shell>` | Generate completions | `gwt completions generate zsh` | ✅ **Working** |
-| `gwt auth <provider>` | Manage authentication for providers | `gwt auth github` | ✅ **Working** |
-
-**New in Rust version:**
-- ✅ **Real-time streaming output** - See git clone progress live!
-- ✅ **Single binary** - No Node.js dependency
-- ✅ **Embedded completions** - Completions built into the binary at compile time
-- ✅ **Multi-shell support** - Bash, Zsh, Fish, PowerShell, and Elvish
-- ✅ **Smart completions** - Auto-detect shell and install with one command
-- ✅ **Better performance** - Compiled Rust vs interpreted TypeScript
-- ✅ **Sharp table output** - Clean, modern table formatting with proper column alignment
-- ✅ **Multi-provider support** - Works with GitHub, Bitbucket Cloud, and Bitbucket Data Center
-- ✅ **Comprehensive PR integration** - See pull request status across all providers
-- ✅ **Secure authentication** - Keyring-based credential storage for Bitbucket
+| Command                            | Description                           | Example                                 | Status        |
+| ---------------------------------- | ------------------------------------- | --------------------------------------- | ------------- |
+| `gwt init <url>`                   | Initialize worktree project from repo | `gwt init git@github.com:user/repo.git` | ✅ **Working** |
+| `gwt list`                         | List all worktrees in a table         | `gwt list`                              | ✅ **Working** |
+| `gwt add <branch>`                 | Create new worktree for branch        | `gwt add feature/new-ui`                | ✅ **Working** |
+| `gwt remove [branch]`              | Remove worktree (current if no args)  | `gwt remove old-feature`                | ✅ **Working** |
+| `gwt completions`                  | Check completion status               | `gwt completions`                       | ✅ **Working** |
+| `gwt completions install [shell]`  | Auto-install completions              | `gwt completions install`               | ✅ **Working** |
+| `gwt completions generate <shell>` | Generate completions                  | `gwt completions generate zsh`          | ✅ **Working** |
+| `gwt auth <provider>`              | Manage authentication for providers   | `gwt auth github`                       | ✅ **Working** |
 
 ## Hooks & Automation
 
