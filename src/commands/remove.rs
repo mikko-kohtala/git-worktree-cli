@@ -73,7 +73,7 @@ pub fn run(branch_name: Option<&str>, force: bool) -> Result<()> {
         "preRemove",
         &target_worktree.path,
         &[
-            ("branchName", &branch_display),
+            ("branchName", branch_display),
             ("worktreePath", target_worktree.path.to_str().unwrap()),
         ],
     )?;

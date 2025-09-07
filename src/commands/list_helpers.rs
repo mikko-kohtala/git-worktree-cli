@@ -40,19 +40,19 @@ fn fetch_github_pr(
             Ok(prs) => {
                 if let Some(pr) = prs.first() {
                     let status = if pr.draft {
-                        "DRAFT"
+                        "DRAFT".to_string()
                     } else {
                         match pr.state.to_lowercase().as_str() {
-                            "open" => "OPEN",
-                            "closed" => "CLOSED",
-                            "merged" => "MERGED",
-                            _ => &pr.state.to_uppercase(),
+                            "open" => "OPEN".to_string(),
+                            "closed" => "CLOSED".to_string(),
+                            "merged" => "MERGED".to_string(),
+                            _ => pr.state.to_uppercase(),
                         }
                     };
 
                     Ok(Some(PullRequestInfo {
                         url: pr.html_url.clone(),
-                        status: status.to_string(),
+                        status,
                         title: pr.title.clone(),
                     }))
                 } else {

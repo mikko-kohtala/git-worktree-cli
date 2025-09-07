@@ -1,6 +1,6 @@
 [package]
 name = "git-worktree-cli"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 authors = ["Mikko Kohtala"]
 description = "Enhanced git worktree management with real-time streaming output"
