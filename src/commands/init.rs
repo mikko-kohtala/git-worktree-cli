@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::git;
 use crate::{bitbucket_api, github};
 
-pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
+pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()> {
     // Detect or validate the repository provider
     let detected_provider = detect_repository_provider(repo_url, provider)?;
 
@@ -18,8 +18,14 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
     let repo_name = extract_repo_name(repo_url)?;
     let project_root = std::env::current_dir()?;
 
-    // Remove existing clone directory if it exists
+    // Check for existing clone directory
     if Path::new(&repo_name).exists() {
+        if !force {
+            return Err(Error::msg(format!(
+                "Directory '{}' already exists. Use --force to overwrite or remove it manually.",
+                repo_name
+            )));
+        }
         fs::remove_dir_all(&repo_name)
             .map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
@@ -32,14 +38,22 @@ pub fn run(repo_url: &str, provider: Option<Provider>) -> Result<()> {
     let default_branch =
         git::get_default_branch(&repo_path).map_err(|e| Error::git(format!("Failed to get default branch: {}", e)))?;
 
-    // Rename directory to match branch name
-    let final_dir_name = &default_branch;
-    if Path::new(final_dir_name).exists() {
-        fs::remove_dir_all(final_dir_name)
+    // Sanitize branch name for use as directory name
+    let final_dir_name = default_branch.replace(['/', '\\'], "-");
+    
+    // Check for existing branch directory
+    if Path::new(&final_dir_name).exists() {
+        if !force {
+            return Err(Error::msg(format!(
+                "Directory '{}' already exists. Use --force to overwrite or remove it manually.",
+                final_dir_name
+            )));
+        }
+        fs::remove_dir_all(&final_dir_name)
             .map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
-    fs::rename(&repo_name, final_dir_name).map_err(|e| Error::msg(format!("Failed to rename directory: {}", e)))?;
+    fs::rename(&repo_name, &final_dir_name).map_err(|e| Error::msg(format!("Failed to rename directory: {}", e)))?;
 
     // Create configuration file
     let config = GitWorktreeConfig::new(repo_url.to_string(), default_branch.clone(), detected_provider);

@@ -132,11 +132,22 @@ fn test_gwt_init_directory_cleanup() {
     let conflict_dir = temp_path.join("git-worktree-cli");
     fs::create_dir(&conflict_dir).unwrap();
 
-    // Test gwt init - should clean up conflicting directory
+    // Test gwt init - should fail without --force flag
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.current_dir(temp_path)
         .arg("init")
         .arg("https://github.com/pitkane/git-worktree-cli.git");
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("already exists. Use --force to overwrite"));
+
+    // Now test with --force flag - should succeed
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(temp_path)
+        .arg("init")
+        .arg("https://github.com/pitkane/git-worktree-cli.git")
+        .arg("--force");
 
     cmd.assert().success();
 

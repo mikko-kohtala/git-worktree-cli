@@ -7,6 +7,7 @@
 - **Build debug binary**: `cargo build`
 - **Run tests**: `cargo test`
 - **Type checking**: `cargo check`
+- **Lint code**: `cargo clippy -- -D warnings`
 - **Format code**: `cargo fmt`
 
 ### Version Management
