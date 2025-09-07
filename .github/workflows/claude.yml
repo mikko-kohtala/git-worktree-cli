@@ -12,11 +12,20 @@ on:
 
 jobs:
   claude:
+    # Only allow repository owner to trigger Claude with @claude
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' && 
+       contains(github.event.comment.body, '@claude') && 
+       github.event.comment.user.login == github.repository_owner) ||
+      (github.event_name == 'pull_request_review_comment' && 
+       contains(github.event.comment.body, '@claude') && 
+       github.event.comment.user.login == github.repository_owner) ||
+      (github.event_name == 'pull_request_review' && 
+       contains(github.event.review.body, '@claude') && 
+       github.event.review.user.login == github.repository_owner) ||
+      (github.event_name == 'issues' && 
+       (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) && 
+       github.event.issue.user.login == github.repository_owner)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,11 +61,14 @@ jobs:
           # Optional: Allow Claude to run specific commands
           # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
           
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # custom_instructions: |
-          #   Follow our coding standards
-          #   Ensure all new code has tests
-          #   Use TypeScript for new files
+          # Custom instructions for git-worktree-cli Rust project
+          custom_instructions: |
+            This is a Rust CLI project for managing git worktrees.
+            Follow Rust best practices and idioms.
+            Ensure error handling uses Result types appropriately.
+            Write tests using assert_cmd for CLI integration tests.
+            Keep the CLAUDE.md file updated with any significant changes.
+            Focus on performance for large git repositories.
           
           # Optional: Custom environment variables for Claude
           # claude_env: |

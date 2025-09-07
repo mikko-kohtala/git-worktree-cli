@@ -16,8 +16,7 @@ impl BitbucketAuth {
     pub fn new(workspace: String, repo: String, email: Option<String>) -> Result<Self> {
         // Use workspace/repo as the key identifier for better isolation
         let key_id = format!("{}/{}", workspace, repo);
-        let token_entry =
-            Entry::new(SERVICE_NAME, &key_id)?;
+        let token_entry = Entry::new(SERVICE_NAME, &key_id)?;
 
         Ok(BitbucketAuth { email, token_entry })
     }
@@ -31,11 +30,13 @@ impl BitbucketAuth {
         }
 
         // Then check keyring
-        self.token_entry.get_password().map_err(|_| Error::auth(format!(
-            "No Bitbucket Cloud API token found. Please set the {} and {} environment variables.\n\
+        self.token_entry.get_password().map_err(|_| {
+            Error::auth(format!(
+                "No Bitbucket Cloud API token found. Please set the {} and {} environment variables.\n\
                 Run 'gwt auth bitbucket-cloud setup' for instructions.",
-            EMAIL_ENV_VAR, TOKEN_ENV_VAR
-        )))
+                EMAIL_ENV_VAR, TOKEN_ENV_VAR
+            ))
+        })
     }
 
     pub fn email(&self) -> Option<String> {

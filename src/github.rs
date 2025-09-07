@@ -11,6 +11,29 @@ pub struct PullRequest {
     pub draft: bool,
 }
 
+// Structs for gh CLI JSON output
+#[derive(Debug, Deserialize)]
+struct GhPrResponse {
+    number: u32,
+    title: String,
+    state: String,
+    url: String,
+    #[serde(rename = "isDraft")]
+    is_draft: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GhPrWithBranchResponse {
+    number: u32,
+    title: String,
+    state: String,
+    url: String,
+    #[serde(rename = "isDraft")]
+    is_draft: bool,
+    #[serde(rename = "headRefName")]
+    head_ref_name: String,
+}
+
 pub struct GitHubClient;
 
 impl Default for GitHubClient {
@@ -67,7 +90,7 @@ impl GitHubClient {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
                 return Err(Error::auth(
-                    "GitHub authentication failed. Run 'gh auth login' to authenticate."
+                    "GitHub authentication failed. Run 'gh auth login' to authenticate.",
                 ));
             }
             return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
@@ -78,17 +101,17 @@ impl GitHubClient {
             return Ok(vec![]);
         }
 
-        let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
+        let prs: Vec<GhPrResponse> = serde_json::from_str(&stdout)
+            .map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()
             .map(|pr| PullRequest {
-                number: pr["number"].as_u64().unwrap_or(0) as u32,
-                title: pr["title"].as_str().unwrap_or("").to_string(),
-                state: pr["state"].as_str().unwrap_or("").to_string(),
-                html_url: pr["url"].as_str().unwrap_or("").to_string(), // Changed from html_url to url
-                draft: pr["isDraft"].as_bool().unwrap_or(false),        // Changed from draft to isDraft
+                number: pr.number,
+                title: pr.title,
+                state: pr.state,
+                html_url: pr.url,
+                draft: pr.is_draft,
             })
             .collect())
     }
@@ -115,7 +138,7 @@ impl GitHubClient {
             let stderr = String::from_utf8_lossy(&output.stderr);
             if stderr.contains("not authenticated") || stderr.contains("authentication") {
                 return Err(Error::auth(
-                    "GitHub authentication failed. Run 'gh auth login' to authenticate."
+                    "GitHub authentication failed. Run 'gh auth login' to authenticate.",
                 ));
             }
             return Err(Error::provider(format!("Failed to fetch pull requests: {}", stderr)));
@@ -126,21 +149,20 @@ impl GitHubClient {
             return Ok(vec![]);
         }
 
-        let prs: Vec<serde_json::Value> =
-            serde_json::from_str(&stdout).map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
+        let prs: Vec<GhPrWithBranchResponse> = serde_json::from_str(&stdout)
+            .map_err(|e| Error::provider(format!("Failed to parse pull requests from gh output: {}", e)))?;
 
         Ok(prs
             .into_iter()
             .map(|pr| {
                 let pull_request = PullRequest {
-                    number: pr["number"].as_u64().unwrap_or(0) as u32,
-                    title: pr["title"].as_str().unwrap_or("").to_string(),
-                    state: pr["state"].as_str().unwrap_or("").to_string(),
-                    html_url: pr["url"].as_str().unwrap_or("").to_string(),
-                    draft: pr["isDraft"].as_bool().unwrap_or(false),
+                    number: pr.number,
+                    title: pr.title,
+                    state: pr.state,
+                    html_url: pr.url,
+                    draft: pr.is_draft,
                 };
-                let branch = pr["headRefName"].as_str().unwrap_or("").to_string();
-                (pull_request, branch)
+                (pull_request, pr.head_ref_name)
             })
             .collect())
     }

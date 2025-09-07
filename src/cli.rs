@@ -85,6 +85,9 @@ pub enum Commands {
         /// Repository provider (required for unknown URLs)
         #[arg(long, value_enum)]
         provider: Option<Provider>,
+        /// Force overwrite existing directories
+        #[arg(short, long)]
+        force: bool,
     },
 
     /// Add a new worktree for a branch

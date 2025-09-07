@@ -12,11 +12,11 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Only run automatically for repository owners and maintainers
+    # External contributors can use @claude in comments to trigger review
+    if: |
+      github.event.pull_request.user.login == github.repository_owner ||
+      contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
     
     runs-on: ubuntu-latest
     permissions:
@@ -42,14 +42,16 @@ jobs:
 
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            Please review this Rust pull request for git-worktree-cli and provide feedback on:
+            - Rust idioms and best practices (error handling, ownership, lifetimes)
+            - CLI design and user experience
+            - Git operations correctness and safety
+            - Code quality and potential bugs
+            - Performance considerations for large repositories
+            - Test coverage (unit tests and integration tests with assert_cmd)
+            - Documentation and code comments
             
-            Be constructive and helpful in your feedback.
+            Focus on the specific changes in this PR. Be constructive and educational in your feedback.
 
           # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
           # use_sticky_comment: true
