@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1] - 2025-01-09
+
+### Fixed
+- Permission denied error on Linux when installing completions to system directories
+- Completion path prioritization now prefers user-writable directories (`~/.local/share/bash-completion/completions`) over system directories (`/etc/bash_completion.d`)
+- Improved writability check on Unix systems using actual write test instead of readonly flag
+
 ## [0.4.0] - 2025-01-07
 
 ### Added

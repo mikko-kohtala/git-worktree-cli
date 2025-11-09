@@ -13,6 +13,26 @@ const FISH_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completion
 const POWERSHELL_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completions/_gwt.ps1"));
 const ELVISH_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completions/gwt.elv"));
 
+fn is_writable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        // On Unix, check if we have write permission by attempting to create a temp file
+        let test_file = path.join(format!(".gwt_write_test_{}", std::process::id()));
+        let writable = fs::write(&test_file, b"").is_ok();
+        let _ = fs::remove_file(&test_file); // Clean up if it was created
+        writable
+    }
+
+    #[cfg(not(unix))]
+    {
+        // On non-Unix systems, use readonly check
+        fs::metadata(path)
+            .ok()
+            .map(|metadata| !metadata.permissions().readonly())
+            .unwrap_or(false)
+    }
+}
+
 pub fn get_completion_content(shell: Shell) -> &'static str {
     match shell {
         Shell::Bash => BASH_COMPLETION,
@@ -55,21 +75,26 @@ pub fn get_completion_install_path(shell: Shell) -> Result<PathBuf> {
 
     match shell {
         Shell::Bash => {
-            // Check for common bash completion directories
-            let paths = vec![
-                PathBuf::from(&home).join(".local/share/bash-completion/completions"),
+            // Always prefer user-writable directory
+            let user_path = PathBuf::from(&home).join(".local/share/bash-completion/completions");
+
+            // Check for system directories only if user directory doesn't exist
+            let system_paths = vec![
                 PathBuf::from("/usr/local/share/bash-completion/completions"),
                 PathBuf::from("/etc/bash_completion.d"),
             ];
 
-            for path in paths {
-                if path.exists() || path.parent().map(|p| p.exists()).unwrap_or(false) {
-                    return Ok(path.join("gwt"));
+            // Try to find a writable system directory if user directory doesn't exist
+            if !user_path.exists() {
+                for path in system_paths {
+                    if path.exists() && is_writable(&path) {
+                        return Ok(path.join("gwt"));
+                    }
                 }
             }
 
-            // Default to ~/.local/share
-            Ok(PathBuf::from(&home).join(".local/share/bash-completion/completions/gwt"))
+            // Default to user-writable directory (will be created if needed)
+            Ok(user_path.join("gwt"))
         }
         Shell::Zsh => {
             // For Zsh, we'll add to the user's fpath
