@@ -74,10 +74,18 @@ impl GitWorktreeConfig {
         let mut current_dir = std::env::current_dir()?;
 
         loop {
+            // First check in current directory
             let config_path = current_dir.join("git-worktree-config.jsonc");
             if config_path.exists() {
                 let config = Self::load(&config_path)?;
                 return Ok(Some((config_path, config)));
+            }
+
+            // Then check in ./main/ subdirectory
+            let main_config_path = current_dir.join("main").join("git-worktree-config.jsonc");
+            if main_config_path.exists() {
+                let config = Self::load(&main_config_path)?;
+                return Ok(Some((main_config_path, config)));
             }
 
             if !current_dir.pop() {

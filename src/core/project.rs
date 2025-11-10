@@ -48,7 +48,14 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     let mut search_path = start_path.to_path_buf();
 
     loop {
+        // First check in current directory
         if search_path.join("git-worktree-config.jsonc").exists() {
+            return Ok(search_path);
+        }
+
+        // Then check in ./main/ subdirectory
+        // If found there, return the parent directory (project root), not ./main/ itself
+        if search_path.join("main").join("git-worktree-config.jsonc").exists() {
             return Ok(search_path);
         }
 

@@ -10,8 +10,5 @@ tarpaulin-report.html
 .DS_Store
 ._*
 
-# Git worktree configuration  
-git-worktree-config.jsonc
-
 # Test directories
 test-temp/

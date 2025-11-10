@@ -1,0 +1,11 @@
+{
+  "repositoryUrl": "git@github.com:mikko-kohtala/git-worktree-cli.git",
+  "mainBranch": "main",
+  "createdAt": "2025-11-09T05:26:36.737356747Z",
+  "sourceControl": "github",
+  "hooks": {
+    "postAdd": [],
+    "preRemove": [],
+    "postRemove": []
+  }
+}

@@ -7,15 +7,9 @@ all: build
 build:
 	cargo build --release
 
-# Install binary to ~/.cargo/bin (or /usr/local/bin with sudo)
-install: build
-	@if [ -d "$$HOME/.cargo/bin" ]; then \
-		install -m 755 target/release/gwt "$$HOME/.cargo/bin/gwt"; \
-		echo "Installed to $$HOME/.cargo/bin/gwt"; \
-	else \
-		sudo install -m 755 target/release/gwt /usr/local/bin/gwt; \
-		echo "Installed to /usr/local/bin/gwt"; \
-	fi
+# Install binary to ~/.cargo/bin
+install:
+	cargo install --path .
 
 # Clean build artifacts
 clean:

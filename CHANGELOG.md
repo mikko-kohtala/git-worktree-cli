@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.0] - 2025-01-10
+
+### Added
+- Configuration file discovery now checks `./main/` subdirectory for `git-worktree-config.jsonc`
+- Project root detection now recognizes `./main/` subdirectory as a valid location for config
+
+### Changed
+- Makefile `install` target now uses `cargo install --path .` instead of manual binary copying
+- `git-worktree-config.jsonc` is no longer ignored by git, allowing it to be committed to repositories
+
 ## [0.4.1] - 2025-01-09
 
 ### Fixed
