@@ -156,3 +156,52 @@ fn test_gwt_init_directory_cleanup() {
 
     cleanup_test_env(temp_dir);
 }
+
+#[test]
+#[serial]
+fn test_gwt_add_with_config_in_main_directory() {
+    let temp_dir = setup_test_env();
+    let temp_path = temp_dir.path();
+
+    // Initialize a repository
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(temp_path)
+        .arg("init")
+        .arg("https://github.com/pitkane/git-worktree-cli.git");
+
+    cmd.assert().success();
+
+    // Find the main branch directory (could be "main" or "master")
+    let main_dir = if temp_path.join("main").exists() {
+        temp_path.join("main")
+    } else {
+        temp_path.join("master")
+    };
+
+    assert!(main_dir.exists(), "Main branch directory should exist");
+
+    // Move the config file into the main/ directory
+    // This simulates the edge case where config is inside main/
+    let config_path = temp_path.join("git-worktree-config.jsonc");
+    let new_config_path = main_dir.join("git-worktree-config.jsonc");
+    fs::rename(&config_path, &new_config_path).unwrap();
+
+    assert!(new_config_path.exists(), "Config should be in main/ directory");
+    assert!(!config_path.exists(), "Config should not be in parent directory");
+
+    // Now try to add a new worktree from the main/ directory
+    // This should succeed with the fix
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(&main_dir)
+        .arg("add")
+        .arg("test-branch");
+
+    // Should succeed even though config is in main/ directory
+    cmd.assert().success();
+
+    // Verify that the new worktree was created in the parent directory
+    let worktree_path = temp_path.join("test-branch");
+    assert!(worktree_path.exists(), "New worktree should be created");
+
+    cleanup_test_env(temp_dir);
+}

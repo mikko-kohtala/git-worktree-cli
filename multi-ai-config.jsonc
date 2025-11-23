@@ -1,0 +1,27 @@
+{
+	// Example configuration for multi-ai CLI
+	"terminals_per_column": 2,  // Number of terminal panes per column (first is AI command, rest are shells)
+    "mode": "tmux-single-window",           // Optional: iterm2 | tmux-single-window | tmux-multi-window (defaults: macOS→iterm2, others→tmux-single-window)
+	"ai_apps": [
+		{
+			"name": "claude",
+			"command": "claude --dangerously-skip-permissions"
+		},
+		{
+			"name": "gemini",
+			"command": "gemini --yolo"
+		},
+		{
+			"name": "codex",
+			"command": "codex --ask-for-approval never"
+		},
+		{
+			"name": "amp",
+			"command": "amp --dangerously-allow-all"
+		},
+		{
+			"name": "opencode",
+			"command": "opencode"
+		}
+	]
+}
