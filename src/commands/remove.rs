@@ -3,12 +3,23 @@ use std::io::{self, Write};
 
 use crate::{
     constants,
-    core::project::{clean_branch_name, find_git_directory, find_project_root_from},
+    core::project::{clean_branch_name, find_git_directory, find_project_root_from, is_orphaned_worktree, find_valid_git_directory, find_project_root},
     error::{Error, Result},
     git, hooks,
 };
 
 pub fn run(branch_name: Option<&str>, force: bool) -> Result<()> {
+    // Check if we're trying to remove an orphaned worktree by directory name
+    if let Some(branch) = branch_name {
+        if let Ok(project_root) = find_project_root() {
+            let potential_worktree_path = project_root.join(branch);
+            if is_orphaned_worktree(&potential_worktree_path) {
+                println!("{}", "⚠️  Detected orphaned worktree (stale git reference)".yellow());
+                return remove_orphaned_worktree(&potential_worktree_path, branch, force);
+            }
+        }
+    }
+
     // Find a git directory to work with
     let git_dir = find_git_directory()?;
 
@@ -26,6 +37,13 @@ pub fn run(branch_name: Option<&str>, force: bool) -> Result<()> {
     // Check if this is the bare repository
     if target_worktree.bare {
         return Err(Error::msg("Cannot remove the main (bare) repository."));
+    }
+
+    // Check if target worktree is orphaned (after finding it in the list)
+    if is_orphaned_worktree(&target_worktree.path) {
+        let branch_display = get_branch_display(target_worktree);
+        println!("{}", "⚠️  Detected orphaned worktree (stale git reference)".yellow());
+        return remove_orphaned_worktree(&target_worktree.path, branch_display, force);
     }
 
     let branch_display = get_branch_display(target_worktree);
@@ -276,4 +294,90 @@ fn get_branch_display(worktree: &git::Worktree) -> &str {
                 &worktree.head[..8.min(worktree.head.len())]
             }
         })
+}
+
+/// Remove an orphaned worktree (one with a stale git reference)
+fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, force: bool) -> Result<()> {
+    use std::fs;
+
+    // Show what will be removed
+    println!("{}", "About to remove orphaned worktree:".cyan().bold());
+    println!("  {}: {}", "Path".dimmed(), worktree_path.display());
+    println!("  {}: {}", "Name".dimmed(), branch_name.green());
+    println!("  {}: {}", "Status".dimmed(), "Orphaned (stale reference)".yellow());
+
+    // Check if we're currently in the worktree being removed
+    let current_dir = std::env::current_dir()?;
+    let will_remove_current = current_dir.starts_with(worktree_path);
+
+    if will_remove_current {
+        println!(
+            "\n{}",
+            "⚠️  You are currently in this worktree. You will be moved to the project root after removal.".yellow()
+        );
+    }
+
+    // Ask for confirmation unless --force is used
+    if !force {
+        print!("\n{}", "Are you sure you want to remove this orphaned worktree? (y/N): ".cyan());
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let confirmation = input.trim().to_lowercase();
+
+        if confirmation != "y" && confirmation != "yes" {
+            println!("{}", "Removal cancelled.".yellow());
+            return Ok(());
+        }
+    }
+
+    let project_root = find_project_root()?;
+
+    // If we're currently in the worktree being removed, change directory first
+    if will_remove_current {
+        std::env::set_current_dir(&project_root)?;
+    }
+
+    // Remove the directory
+    println!("\n{}", "Removing orphaned worktree directory...".cyan());
+    fs::remove_dir_all(worktree_path).map_err(|e| {
+        Error::msg(format!(
+            "Failed to remove directory {}: {}",
+            worktree_path.display(),
+            e
+        ))
+    })?;
+
+    println!(
+        "{}",
+        format!("✓ Directory removed: {}", worktree_path.display()).green()
+    );
+
+    // Try to prune worktree references from a valid git directory
+    if let Ok(valid_git_dir) = find_valid_git_directory(&project_root) {
+        println!("{}", "Pruning stale worktree references...".cyan());
+        match git::prune_worktrees(&valid_git_dir) {
+            Ok(_) => {
+                println!("{}", "✓ Worktree references pruned".green());
+            }
+            Err(e) => {
+                println!(
+                    "{}",
+                    format!("⚠️  Failed to prune worktree references: {}", e).yellow()
+                );
+            }
+        }
+    }
+
+    if will_remove_current {
+        println!(
+            "{}",
+            format!("✓ Moved to project root: {}", project_root.display()).green()
+        );
+    }
+
+    println!("\n{}", "Note: Orphaned worktree removed. Hooks were skipped due to invalid git state.".dimmed());
+
+    Ok(())
 }
