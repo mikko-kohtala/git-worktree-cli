@@ -3,10 +3,12 @@ name = "git-worktree-cli"
 version = "0.5.0"
 edition = "2021"
 authors = ["Mikko Kohtala"]
-description = "Enhanced git worktree management with real-time streaming output"
+description = "Enhanced git worktree management tool"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/mikko-kohtala/git-worktree-cli"
+homepage = "https://github.com/mikko-kohtala/git-worktree-cli"
+exclude = ["tests/", ".github/", "Makefile"]
 keywords = ["git", "worktree", "cli", "development", "workflow"]
 categories = ["command-line-utilities", "development-tools"]
 
