@@ -66,6 +66,13 @@ pub fn list_worktrees(git_dir: Option<&Path>) -> Result<Vec<Worktree>> {
     parse_worktree_list(&output)
 }
 
+/// Prune worktree administrative files
+///
+/// Removes worktree references from .git/worktrees that are no longer valid
+pub fn prune_worktrees(git_dir: &Path) -> Result<()> {
+    execute_streaming(&["worktree", "prune"], Some(git_dir))
+}
+
 /// Remove a worktree
 /// Delete a branch
 /// Check if a branch exists

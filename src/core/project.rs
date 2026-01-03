@@ -166,6 +166,69 @@ pub fn find_existing_worktree(project_root: &Path) -> Result<PathBuf> {
     })
 }
 
+/// Check if a path is an orphaned worktree
+///
+/// A worktree is orphaned if its .git file points to a non-existent gitdir path.
+/// This can happen when a repository is moved to a new location.
+pub fn is_orphaned_worktree(path: &Path) -> bool {
+    let git_file = path.join(".git");
+
+    // Check if .git is a file (worktree indicator)
+    if !git_file.is_file() {
+        return false;
+    }
+
+    // Read the .git file to get the gitdir path
+    let Ok(content) = fs::read_to_string(&git_file) else {
+        return false;
+    };
+
+    // Parse "gitdir: /path/to/gitdir"
+    let Some(gitdir_line) = content.lines().find(|line| line.starts_with("gitdir: ")) else {
+        return false;
+    };
+
+    let gitdir_path = gitdir_line.trim_start_matches("gitdir: ").trim();
+
+    // Check if the gitdir path exists
+    !Path::new(gitdir_path).exists()
+}
+
+/// Find a valid (non-orphaned) git directory in the project
+///
+/// This searches the project root for a git directory that is not orphaned.
+/// Useful when the current directory is an orphaned worktree.
+pub fn find_valid_git_directory(project_root: &Path) -> Result<PathBuf> {
+    // Check if project root itself has valid .git directory
+    let root_git_path = project_root.join(".git");
+    if root_git_path.is_dir() {
+        return Ok(project_root.to_path_buf());
+    }
+
+    // Search subdirectories for valid git directories
+    let entries = fs::read_dir(project_root).map_err(Error::Io)?;
+
+    for entry in entries {
+        let entry = entry.map_err(Error::Io)?;
+        if entry.file_type().map_err(Error::Io)?.is_dir() {
+            let dir_path = entry.path();
+            let git_path = dir_path.join(".git");
+
+            if git_path.is_dir() {
+                // Main repository - always valid
+                return Ok(dir_path);
+            } else if git_path.is_file() && !is_orphaned_worktree(&dir_path) {
+                // Valid worktree (not orphaned)
+                return Ok(dir_path);
+            }
+        }
+    }
+
+    Err(Error::Other(
+        "No valid git directory found in project".to_string()
+    ))
+}
+
 /// Clean a branch name by removing refs/heads/ prefix
 pub fn clean_branch_name(branch: &str) -> &str {
     branch.trim().strip_prefix("refs/heads/").unwrap_or(branch.trim())
