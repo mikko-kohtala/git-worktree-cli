@@ -3,12 +3,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cli::Provider;
-use crate::config::{GitWorktreeConfig, CONFIG_FILENAME};
+use crate::config::{generate_config_filename, GitWorktreeConfig, CONFIG_FILENAME};
 use crate::error::{Error, Result};
 use crate::git;
 use crate::{bitbucket_api, github};
 
-pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()> {
+pub fn run(repo_url: Option<&str>, provider: Option<Provider>, force: bool, local: bool) -> Result<()> {
+    match repo_url {
+        Some(url) => run_clone(url, provider, force, local),
+        None => run_existing(provider, local),
+    }
+}
+
+/// Initialize by cloning a repository
+fn run_clone(repo_url: &str, provider: Option<Provider>, force: bool, local: bool) -> Result<()> {
     // Detect or validate the repository provider
     let detected_provider = detect_repository_provider(repo_url, provider)?;
 
@@ -30,7 +38,7 @@ pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()
             .map_err(|e| Error::msg(format!("Failed to remove existing directory: {}", e)))?;
     }
 
-    // Clone the repository with streaming output (this is the key improvement!)
+    // Clone the repository with streaming output
     git::clone(repo_url, &repo_name)?;
 
     // Get the default branch name
@@ -55,9 +63,26 @@ pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()
 
     fs::rename(&repo_name, &final_dir_name).map_err(|e| Error::msg(format!("Failed to rename directory: {}", e)))?;
 
-    // Create configuration file
-    let config = GitWorktreeConfig::new(repo_url.to_string(), default_branch.clone(), detected_provider);
-    let config_path = project_root.join(CONFIG_FILENAME);
+    // Create configuration file with project path
+    let absolute_project_root = project_root.join(&final_dir_name).canonicalize().unwrap_or_else(|_| project_root.join(&final_dir_name));
+    let config = GitWorktreeConfig::new(
+        repo_url.to_string(),
+        default_branch.clone(),
+        detected_provider,
+        Some(absolute_project_root),
+    );
+
+    // Determine config location
+    let config_path = if local {
+        project_root.join(CONFIG_FILENAME)
+    } else {
+        let projects_dir = GitWorktreeConfig::projects_config_dir()?;
+        fs::create_dir_all(&projects_dir)
+            .map_err(|e| Error::config(format!("Failed to create config directory: {}", e)))?;
+        let filename = generate_config_filename(repo_url);
+        projects_dir.join(filename)
+    };
+
     config
         .save(&config_path)
         .map_err(|e| Error::config(format!("Failed to save configuration: {}", e)))?;
@@ -67,7 +92,71 @@ pub fn run(repo_url: &str, provider: Option<Provider>, force: bool) -> Result<()
     println!("{}", format!("✓ Default branch: {}", default_branch).green());
     println!("{}", format!("✓ Config saved to: {}", config_path.display()).green());
 
-    // Post-init hooks removed - no longer needed
+    if !local {
+        println!("{}", "  (Use --local to store config in project directory)".dimmed());
+    }
+
+    Ok(())
+}
+
+/// Initialize an existing repository (no cloning)
+fn run_existing(provider: Option<Provider>, local: bool) -> Result<()> {
+    let current_dir = std::env::current_dir()?;
+
+    // Check if we're in a git repository
+    let git_root = git::get_git_root()?
+        .ok_or_else(|| Error::git("Not in a git repository. Run 'gwt init <url>' to clone a new repository."))?;
+
+    // Get the remote URL
+    let repo_url = git::get_remote_origin_url(&git_root)
+        .ok_or_else(|| Error::git("No remote 'origin' found. Please add a remote or use 'gwt init <url>'."))?;
+
+    // Detect or validate the repository provider
+    let detected_provider = detect_repository_provider(&repo_url, provider)?;
+
+    println!("{}", format!("✓ Detected provider: {:?}", detected_provider).green());
+
+    // Get the current branch name
+    let current_branch = git::get_default_branch(&current_dir)
+        .map_err(|e| Error::git(format!("Failed to get current branch: {}", e)))?;
+
+    // Use the git root as the project path
+    let absolute_project_root = git_root.canonicalize().unwrap_or_else(|_| git_root.clone());
+
+    // Create configuration
+    let config = GitWorktreeConfig::new(
+        repo_url.clone(),
+        current_branch.clone(),
+        detected_provider,
+        Some(absolute_project_root.clone()),
+    );
+
+    // Determine config location
+    let config_path = if local {
+        // For local, put it in the parent of git root (worktree project root)
+        absolute_project_root.parent()
+            .map(|p| p.join(CONFIG_FILENAME))
+            .unwrap_or_else(|| absolute_project_root.join(CONFIG_FILENAME))
+    } else {
+        let projects_dir = GitWorktreeConfig::projects_config_dir()?;
+        fs::create_dir_all(&projects_dir)
+            .map_err(|e| Error::config(format!("Failed to create config directory: {}", e)))?;
+        let filename = generate_config_filename(&repo_url);
+        projects_dir.join(filename)
+    };
+
+    config
+        .save(&config_path)
+        .map_err(|e| Error::config(format!("Failed to save configuration: {}", e)))?;
+
+    // Print success messages
+    println!("{}", format!("✓ Repository: {}", repo_url).green());
+    println!("{}", format!("✓ Main branch: {}", current_branch).green());
+    println!("{}", format!("✓ Config saved to: {}", config_path.display()).green());
+
+    if !local {
+        println!("{}", "  (Use --local to store config in project directory)".dimmed());
+    }
 
     Ok(())
 }

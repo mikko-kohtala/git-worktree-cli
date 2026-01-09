@@ -96,6 +96,11 @@ pub fn get_git_root() -> Result<Option<PathBuf>> {
     }
 }
 
+/// Get the remote origin URL from a git repository
+pub fn get_remote_origin_url(path: &Path) -> Option<String> {
+    execute_capture(&["remote", "get-url", "origin"], Some(path)).ok()
+}
+
 #[derive(Debug, Clone)]
 pub struct Worktree {
     pub path: PathBuf,

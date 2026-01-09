@@ -12,11 +12,12 @@ fn test_gwt_init_with_valid_repo() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Test gwt init with a real repository
+    // Test gwt init with a real repository using --local to create local config
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.current_dir(temp_path)
         .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git");
+        .arg("https://github.com/pitkane/git-worktree-cli.git")
+        .arg("--local");
 
     let output = cmd.assert().success();
 
@@ -86,11 +87,12 @@ fn test_gwt_init_hooks_execution() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Test gwt init and verify hooks are executed
+    // Test gwt init and verify hooks are executed (using --local for local config)
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.current_dir(temp_path)
         .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git");
+        .arg("https://github.com/pitkane/git-worktree-cli.git")
+        .arg("--local");
 
     let _output = cmd.assert().success();
 
@@ -136,7 +138,8 @@ fn test_gwt_init_directory_cleanup() {
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.current_dir(temp_path)
         .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git");
+        .arg("https://github.com/pitkane/git-worktree-cli.git")
+        .arg("--local");
 
     cmd.assert()
         .failure()
@@ -147,7 +150,8 @@ fn test_gwt_init_directory_cleanup() {
     cmd.current_dir(temp_path)
         .arg("init")
         .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--force");
+        .arg("--force")
+        .arg("--local");
 
     cmd.assert().success();
 
@@ -163,11 +167,12 @@ fn test_gwt_add_with_config_in_main_directory() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Initialize a repository
+    // Initialize a repository with --local to create local config
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.current_dir(temp_path)
         .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git");
+        .arg("https://github.com/pitkane/git-worktree-cli.git")
+        .arg("--local");
 
     cmd.assert().success();
 

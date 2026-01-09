@@ -16,8 +16,9 @@ fn main() -> Result<()> {
             repo_url,
             provider,
             force,
+            local,
         } => {
-            init::run(&repo_url, provider, force)?;
+            init::run(repo_url.as_deref(), provider, force, local)?;
         }
         Commands::Add { branch_name } => {
             add::run(&branch_name)?;

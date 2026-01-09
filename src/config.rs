@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::Provider;
 use crate::error::{Error, Result};
+use crate::git;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,6 +14,8 @@ pub struct GitWorktreeConfig {
     pub main_branch: String,
     pub created_at: DateTime<Utc>,
     pub source_control: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bitbucket_email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,7 +34,12 @@ pub struct Hooks {
 }
 
 impl GitWorktreeConfig {
-    pub fn new(repository_url: String, main_branch: String, provider: Provider) -> Self {
+    pub fn new(
+        repository_url: String,
+        main_branch: String,
+        provider: Provider,
+        project_path: Option<PathBuf>,
+    ) -> Self {
         // Convert provider enum to string
         let source_control = match provider {
             Provider::Github => "github".to_string(),
@@ -44,6 +52,7 @@ impl GitWorktreeConfig {
             main_branch,
             created_at: Utc::now(),
             source_control,
+            project_path,
             bitbucket_email: None,
             hooks: Some(Hooks {
                 post_add: Some(vec![]),
@@ -70,19 +79,38 @@ impl GitWorktreeConfig {
         Ok(config)
     }
 
+    /// Find configuration for the current project
+    /// Priority: Local config first, then global config
     pub fn find_config() -> Result<Option<(PathBuf, Self)>> {
-        let mut current_dir = std::env::current_dir()?;
+        let current_dir = std::env::current_dir()?;
+
+        // Step 1: Check for local config (walk up directory tree)
+        if let Some(result) = Self::find_local_config(&current_dir)? {
+            return Ok(Some(result));
+        }
+
+        // Step 2: Try to find global config
+        if let Some(result) = Self::find_global_config(&current_dir)? {
+            return Ok(Some(result));
+        }
+
+        Ok(None)
+    }
+
+    /// Find local config by walking up directory tree
+    fn find_local_config(start_dir: &Path) -> Result<Option<(PathBuf, Self)>> {
+        let mut current_dir = start_dir.to_path_buf();
 
         loop {
-            // First check in current directory
-            let config_path = current_dir.join("git-worktree-config.jsonc");
+            // Check in current directory
+            let config_path = current_dir.join(CONFIG_FILENAME);
             if config_path.exists() {
                 let config = Self::load(&config_path)?;
                 return Ok(Some((config_path, config)));
             }
 
-            // Then check in ./main/ subdirectory
-            let main_config_path = current_dir.join("main").join("git-worktree-config.jsonc");
+            // Check in ./main/ subdirectory
+            let main_config_path = current_dir.join("main").join(CONFIG_FILENAME);
             if main_config_path.exists() {
                 let config = Self::load(&main_config_path)?;
                 return Ok(Some((main_config_path, config)));
@@ -95,6 +123,142 @@ impl GitWorktreeConfig {
 
         Ok(None)
     }
+
+    /// Find global config by matching repository URL or project path
+    fn find_global_config(start_dir: &Path) -> Result<Option<(PathBuf, Self)>> {
+        let projects_dir = match Self::projects_config_dir() {
+            Ok(dir) => dir,
+            Err(_) => return Ok(None),
+        };
+
+        if !projects_dir.exists() {
+            return Ok(None);
+        }
+
+        // Strategy 1: Try to match by repository URL
+        if let Some(repo_url) = git::get_remote_origin_url(start_dir) {
+            let filename = generate_config_filename(&repo_url);
+            let config_path = projects_dir.join(&filename);
+            if config_path.exists() {
+                let config = Self::load(&config_path)?;
+                return Ok(Some((config_path, config)));
+            }
+        }
+
+        // Strategy 2: Search all configs for matching project_path
+        if let Ok(entries) = fs::read_dir(&projects_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "jsonc").unwrap_or(false) {
+                    if let Ok(config) = Self::load(&path) {
+                        if let Some(ref project_path) = config.project_path {
+                            if start_dir.starts_with(project_path) {
+                                return Ok(Some((path, config)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Get the global config directory (~/.git-worktree-cli)
+    pub fn global_config_dir() -> Result<PathBuf> {
+        dirs::home_dir()
+            .ok_or_else(|| Error::config("Could not determine home directory"))
+            .map(|home| home.join(".git-worktree-cli"))
+    }
+
+    /// Get the projects config directory (~/.git-worktree-cli/projects)
+    pub fn projects_config_dir() -> Result<PathBuf> {
+        Self::global_config_dir().map(|d| d.join("projects"))
+    }
+}
+
+/// Generate a safe filename from a repository URL
+pub fn generate_config_filename(repo_url: &str) -> String {
+    if let Some(id) = extract_repo_identifier(repo_url) {
+        format!("{}.jsonc", sanitize_for_filename(&id))
+    } else {
+        // Fallback: hash the URL
+        format!("url_{}.jsonc", short_hash(repo_url))
+    }
+}
+
+fn extract_repo_identifier(url: &str) -> Option<String> {
+    // GitHub SSH: git@github.com:owner/repo.git
+    if let Some(rest) = url.strip_prefix("git@github.com:") {
+        let cleaned = rest.trim_end_matches(".git");
+        return Some(format!("github_{}", cleaned.replace('/', "_")));
+    }
+
+    // GitHub HTTPS: https://github.com/owner/repo.git
+    if let Some(rest) = url.strip_prefix("https://github.com/") {
+        let cleaned = rest.trim_end_matches(".git");
+        return Some(format!("github_{}", cleaned.replace('/', "_")));
+    }
+
+    // Bitbucket Cloud SSH
+    if let Some(rest) = url.strip_prefix("git@bitbucket.org:") {
+        let cleaned = rest.trim_end_matches(".git");
+        return Some(format!("bitbucket_{}", cleaned.replace('/', "_")));
+    }
+
+    // Bitbucket Cloud HTTPS
+    if let Some(rest) = url.strip_prefix("https://bitbucket.org/") {
+        let cleaned = rest.trim_end_matches(".git");
+        return Some(format!("bitbucket_{}", cleaned.replace('/', "_")));
+    }
+
+    // Generic SSH format: git@host:path
+    if url.starts_with("git@") {
+        let rest = url.strip_prefix("git@").unwrap();
+        if let Some((host, path)) = rest.split_once(':') {
+            let host_clean = host.replace('.', "_");
+            let path_clean = path.trim_end_matches(".git").replace('/', "_");
+            return Some(format!("{}_{}", host_clean, path_clean));
+        }
+    }
+
+    // Generic HTTPS: try to extract host and path
+    if url.starts_with("https://") || url.starts_with("http://") {
+        let without_protocol = url
+            .strip_prefix("https://")
+            .or_else(|| url.strip_prefix("http://"))
+            .unwrap();
+        let parts: Vec<&str> = without_protocol.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            let host_clean = parts[0].replace('.', "_");
+            let path_clean = parts[1].trim_end_matches(".git").replace('/', "_");
+            return Some(format!("{}_{}", host_clean, path_clean));
+        }
+    }
+
+    None
+}
+
+fn sanitize_for_filename(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn short_hash(s: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    s.hash(&mut hasher);
+    format!("{:x}", hasher.finish())[..12].to_string()
 }
 
 pub const CONFIG_FILENAME: &str = "git-worktree-config.jsonc";
@@ -110,6 +274,7 @@ mod tests {
             "git@github.com:test/repo.git".to_string(),
             "main".to_string(),
             Provider::Github,
+            None,
         );
 
         assert_eq!(config.repository_url, "git@github.com:test/repo.git");
@@ -130,6 +295,7 @@ mod tests {
             "https://bitbucket.org/workspace/repo.git".to_string(),
             "main".to_string(),
             Provider::BitbucketCloud,
+            None,
         );
 
         assert_eq!(config.repository_url, "https://bitbucket.org/workspace/repo.git");
@@ -144,6 +310,7 @@ mod tests {
             "https://bitbucket.company.com/scm/project/repo.git".to_string(),
             "main".to_string(),
             Provider::BitbucketDataCenter,
+            None,
         );
 
         assert_eq!(
@@ -164,6 +331,7 @@ mod tests {
             "git@github.com:test/repo.git".to_string(),
             "develop".to_string(),
             Provider::Github,
+            None,
         );
 
         // Save config
@@ -177,58 +345,53 @@ mod tests {
     }
 
     #[test]
-    fn test_config_find_in_current_dir() {
+    fn test_config_find_local_in_current_dir() {
         let temp_dir = tempdir().unwrap();
-        let original_cwd = std::env::current_dir().unwrap();
 
         // Create config in temp directory first
         let config = GitWorktreeConfig::new(
             "git@github.com:test/repo.git".to_string(),
             "main".to_string(),
             Provider::Github,
+            None,
         );
         config.save(&temp_dir.path().join(CONFIG_FILENAME)).unwrap();
 
-        // Change to temp directory
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        // Find config should return the config
-        let result = GitWorktreeConfig::find_config().unwrap();
+        // Find local config should return the config
+        let result = GitWorktreeConfig::find_local_config(temp_dir.path()).unwrap();
         assert!(result.is_some());
 
         let (_found_path, found_config) = result.unwrap();
         assert_eq!(found_config.repository_url, "git@github.com:test/repo.git");
         assert_eq!(found_config.main_branch, "main");
-
-        // Restore original directory before temp_dir is dropped
-        // Use unwrap_or_else to handle case where original_cwd may not exist
-        if original_cwd.exists() {
-            std::env::set_current_dir(&original_cwd).unwrap();
-        } else {
-            // Fallback to a directory that should exist
-            std::env::set_current_dir("/").unwrap();
-        }
     }
 
     #[test]
-    fn test_config_not_found() {
+    fn test_generate_config_filename() {
+        assert_eq!(
+            generate_config_filename("git@github.com:owner/repo.git"),
+            "github_owner_repo.jsonc"
+        );
+        assert_eq!(
+            generate_config_filename("https://github.com/owner/repo.git"),
+            "github_owner_repo.jsonc"
+        );
+        assert_eq!(
+            generate_config_filename("git@bitbucket.org:workspace/repo.git"),
+            "bitbucket_workspace_repo.jsonc"
+        );
+        assert_eq!(
+            generate_config_filename("https://bitbucket.org/workspace/repo.git"),
+            "bitbucket_workspace_repo.jsonc"
+        );
+    }
+
+    #[test]
+    fn test_config_local_not_found() {
         let temp_dir = tempdir().unwrap();
-        let original_cwd = std::env::current_dir().unwrap();
 
-        // Change to empty temp directory
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
-        // Find config should return None
-        let result = GitWorktreeConfig::find_config().unwrap();
+        // Find local config in empty temp directory should return None
+        let result = GitWorktreeConfig::find_local_config(temp_dir.path()).unwrap();
         assert!(result.is_none());
-
-        // Restore original directory before temp_dir is dropped
-        // Use unwrap_or_else to handle case where original_cwd may not exist
-        if original_cwd.exists() {
-            std::env::set_current_dir(&original_cwd).unwrap();
-        } else {
-            // Fallback to a directory that should exist
-            std::env::set_current_dir("/").unwrap();
-        }
     }
 }
