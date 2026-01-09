@@ -78,16 +78,8 @@ pub enum Provider {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Initialize a new worktree project (clone from URL or setup existing repo)
+    /// Initialize git-worktree-cli for an existing repository
     Init {
-        /// The repository URL to clone (optional: if omitted, initializes existing repo)
-        repo_url: Option<String>,
-        /// Repository provider (required for unknown URLs)
-        #[arg(long, value_enum)]
-        provider: Option<Provider>,
-        /// Force overwrite existing directories
-        #[arg(short, long)]
-        force: bool,
         /// Write config to project directory instead of global location
         #[arg(long)]
         local: bool,

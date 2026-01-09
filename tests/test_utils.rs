@@ -91,3 +91,55 @@ macro_rules! require_git {
         }
     };
 }
+
+/// Create a test git repository with a remote origin
+pub fn create_test_git_repo(dir: &std::path::Path, remote_url: &str) -> PathBuf {
+    use std::process::Command;
+
+    let repo_dir = dir.to_path_buf();
+
+    // Initialize git repo
+    Command::new("git")
+        .args(["init"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to init git repo");
+
+    // Configure git user for commits
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to set git email");
+
+    Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to set git name");
+
+    // Create initial commit
+    let readme = repo_dir.join("README.md");
+    fs::write(&readme, "# Test Repo").expect("Failed to write README");
+
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to git add");
+
+    Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to git commit");
+
+    // Add remote origin
+    Command::new("git")
+        .args(["remote", "add", "origin", remote_url])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to add remote");
+
+    repo_dir
+}

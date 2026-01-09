@@ -8,95 +8,83 @@ use test_utils::*;
 
 #[test]
 #[serial]
-fn test_gwt_init_with_valid_repo() {
+fn test_gwt_init_existing_repo() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Test gwt init with a real repository using --local to create local config
+    // Create a subdirectory for the repo (simulating /code/my-repo structure)
+    let repo_dir = temp_path.join("my-repo");
+    fs::create_dir(&repo_dir).unwrap();
+
+    // Create a test git repo with a GitHub remote
+    create_test_git_repo(&repo_dir, "git@github.com:test/my-repo.git");
+
+    // Test gwt init in an existing repo with --local
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path)
-        .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--local");
+    cmd.current_dir(&repo_dir).arg("init").arg("--local");
 
     let output = cmd.assert().success();
 
     // Check that the command outputs expected messages
     output
-        .stdout(predicate::str::contains(
-            "Cloning https://github.com/pitkane/git-worktree-cli.git",
-        ))
-        .stdout(predicate::str::contains("✓ Repository cloned to:"))
-        .stdout(predicate::str::contains("✓ Default branch:"))
+        .stdout(predicate::str::contains("Detected provider: Github"))
+        .stdout(predicate::str::contains("✓ Repository: git@github.com:test/my-repo.git"))
+        .stdout(predicate::str::contains("✓ Project path:"))
+        .stdout(predicate::str::contains("✓ Worktrees path:"))
+        .stdout(predicate::str::contains("my-repo-worktrees"))
         .stdout(predicate::str::contains("✓ Config saved to:"));
 
-    // Check that files were created
+    // Check that config was created in parent directory (for --local)
     let config_path = temp_path.join("git-worktree-config.jsonc");
     assert!(config_path.exists(), "Config file should be created");
 
-    // Check that the main branch directory was created
-    // Note: This will be either "main" or "master" depending on the repo
-    let entries: Vec<_> = fs::read_dir(temp_path)
-        .unwrap()
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            if entry.file_type().ok()?.is_dir() {
-                Some(entry.file_name().to_string_lossy().to_string())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // Should have at least one directory (the cloned repo)
-    assert!(!entries.is_empty(), "Should have created repository directory");
-
     // Verify config file content
     let config_content = fs::read_to_string(&config_path).unwrap();
-    assert!(config_content.contains("\"repositoryUrl\": \"https://github.com/pitkane/git-worktree-cli.git\""));
+    assert!(config_content.contains("\"repositoryUrl\": \"git@github.com:test/my-repo.git\""));
     assert!(config_content.contains("\"mainBranch\":"));
-    assert!(config_content.contains("\"createdAt\":"));
-    assert!(config_content.contains("\"hooks\":"));
+    assert!(config_content.contains("\"worktreesPath\":"));
+    assert!(config_content.contains("my-repo-worktrees"));
 
     cleanup_test_env(temp_dir);
 }
 
 #[test]
 #[serial]
-fn test_gwt_init_with_invalid_repo() {
+fn test_gwt_init_not_in_git_repo() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Test gwt init with invalid repository
+    // Test gwt init outside a git repository - should fail
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path).arg("init").arg("invalid-repo-url");
+    cmd.current_dir(temp_path).arg("init");
 
-    // Should fail with non-zero exit code
-    cmd.assert().failure();
-
-    // Config file should not be created
-    let config_path = temp_path.join("git-worktree-config.jsonc");
-    assert!(!config_path.exists(), "Config file should not be created on failure");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Not in a git repository"));
 
     cleanup_test_env(temp_dir);
 }
 
 #[test]
 #[serial]
-fn test_gwt_init_hooks_execution() {
+fn test_gwt_init_no_remote() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Test gwt init and verify hooks are executed (using --local for local config)
+    // Create a git repo without a remote
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(temp_path)
+        .output()
+        .expect("Failed to init git repo");
+
+    // Test gwt init - should fail because no remote
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path)
-        .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--local");
+    cmd.current_dir(temp_path).arg("init");
 
-    let _output = cmd.assert().success();
-
-    // Post-init hooks removed - no longer testing for them
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("No remote 'origin' found"));
 
     cleanup_test_env(temp_dir);
 }
@@ -126,87 +114,79 @@ fn test_gwt_version() {
 
 #[test]
 #[serial]
-fn test_gwt_init_directory_cleanup() {
+fn test_gwt_init_bitbucket_repo() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Create a directory that would conflict
-    let conflict_dir = temp_path.join("git-worktree-cli");
-    fs::create_dir(&conflict_dir).unwrap();
+    // Create a subdirectory for the repo
+    let repo_dir = temp_path.join("my-bb-repo");
+    fs::create_dir(&repo_dir).unwrap();
 
-    // Test gwt init - should fail without --force flag
+    // Create a test git repo with a Bitbucket remote
+    create_test_git_repo(&repo_dir, "git@bitbucket.org:workspace/my-bb-repo.git");
+
+    // Test gwt init with --local
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path)
-        .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--local");
+    cmd.current_dir(&repo_dir).arg("init").arg("--local");
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("already exists. Use --force to overwrite"));
+    let output = cmd.assert().success();
 
-    // Now test with --force flag - should succeed
-    let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path)
-        .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--force")
-        .arg("--local");
-
-    cmd.assert().success();
-
-    // The directory should still exist but now contain the cloned repo
-    assert!(conflict_dir.exists() || temp_path.join("main").exists() || temp_path.join("master").exists());
+    output.stdout(predicate::str::contains("Detected provider: BitbucketCloud"));
 
     cleanup_test_env(temp_dir);
 }
 
 #[test]
 #[serial]
-fn test_gwt_add_with_config_in_main_directory() {
+fn test_gwt_init_unsupported_provider() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();
 
-    // Initialize a repository with --local to create local config
+    // Create a subdirectory for the repo
+    let repo_dir = temp_path.join("my-repo");
+    fs::create_dir(&repo_dir).unwrap();
+
+    // Create a test git repo with an unsupported remote
+    create_test_git_repo(&repo_dir, "git@gitlab.com:user/repo.git");
+
+    // Test gwt init - should fail with unsupported provider
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path)
-        .arg("init")
-        .arg("https://github.com/pitkane/git-worktree-cli.git")
-        .arg("--local");
+    cmd.current_dir(&repo_dir).arg("init");
+
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Could not detect repository provider"));
+
+    cleanup_test_env(temp_dir);
+}
+
+#[test]
+#[serial]
+fn test_config_worktrees_path_derivation() {
+    let temp_dir = setup_test_env();
+    let temp_path = temp_dir.path();
+
+    // Create repo at /tmp/xxx/agent-tools
+    let repo_dir = temp_path.join("agent-tools");
+    fs::create_dir(&repo_dir).unwrap();
+
+    create_test_git_repo(&repo_dir, "git@github.com:test/agent-tools.git");
+
+    // Initialize
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(&repo_dir).arg("init").arg("--local");
 
     cmd.assert().success();
 
-    // Find the main branch directory (could be "main" or "master")
-    let main_dir = if temp_path.join("main").exists() {
-        temp_path.join("main")
-    } else {
-        temp_path.join("master")
-    };
-
-    assert!(main_dir.exists(), "Main branch directory should exist");
-
-    // Move the config file into the main/ directory
-    // This simulates the edge case where config is inside main/
+    // Check config has correct worktrees_path
     let config_path = temp_path.join("git-worktree-config.jsonc");
-    let new_config_path = main_dir.join("git-worktree-config.jsonc");
-    fs::rename(&config_path, &new_config_path).unwrap();
+    let config_content = fs::read_to_string(&config_path).unwrap();
 
-    assert!(new_config_path.exists(), "Config should be in main/ directory");
-    assert!(!config_path.exists(), "Config should not be in parent directory");
-
-    // Now try to add a new worktree from the main/ directory
-    // This should succeed with the fix
-    let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&main_dir)
-        .arg("add")
-        .arg("test-branch");
-
-    // Should succeed even though config is in main/ directory
-    cmd.assert().success();
-
-    // Verify that the new worktree was created in the parent directory
-    let worktree_path = temp_path.join("test-branch");
-    assert!(worktree_path.exists(), "New worktree should be created");
+    // Should have worktrees path as sibling with -worktrees suffix
+    assert!(
+        config_content.contains("agent-tools-worktrees"),
+        "Config should have worktrees path with -worktrees suffix"
+    );
 
     cleanup_test_env(temp_dir);
 }

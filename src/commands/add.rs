@@ -1,4 +1,5 @@
 use colored::Colorize;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::GitWorktreeConfig;
@@ -107,8 +108,24 @@ pub fn run(branch_name: &str) -> Result<()> {
 
 fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
     let project_root = find_project_root()?;
-    let target_path = project_root.join(branch_name);
     let git_working_dir = find_existing_worktree(&project_root)?;
+
+    // Get worktrees_path from config, or derive it from project_root
+    let worktrees_path = if let Some((_config_path, config)) = GitWorktreeConfig::find_config()? {
+        config
+            .get_worktrees_path()
+            .unwrap_or_else(|| GitWorktreeConfig::derive_worktrees_path(&project_root))
+    } else {
+        GitWorktreeConfig::derive_worktrees_path(&project_root)
+    };
+
+    // Create worktrees directory if it doesn't exist
+    if !worktrees_path.exists() {
+        fs::create_dir_all(&worktrees_path)
+            .map_err(|e| Error::Other(format!("Failed to create worktrees directory: {}", e)))?;
+    }
+
+    let target_path = worktrees_path.join(branch_name);
 
     Ok((git_working_dir, target_path, project_root))
 }

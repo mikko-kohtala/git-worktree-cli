@@ -45,54 +45,101 @@ pub fn find_project_root() -> Result<PathBuf> {
 }
 
 /// Find the project root starting from a specific path
+///
+/// The project root is the main repository directory (where .git is).
+/// This handles both:
+/// - Running from inside the main repo
+/// - Running from inside a worktree in the -worktrees folder
 pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
-    let mut search_path = start_path.to_path_buf();
-
-    // First, check for local config by walking up the directory tree
-    loop {
-        // Check in current directory
-        if search_path.join("git-worktree-config.jsonc").exists() {
-            // Special case: if current directory is named "main" and contains the config,
-            // return the parent directory as the project root
-            if search_path.file_name().and_then(|n| n.to_str()) == Some("main") {
-                if let Some(parent) = search_path.parent() {
-                    return Ok(parent.to_path_buf());
-                }
-            }
-            return Ok(search_path);
+    // Strategy 1: Check if we're in a git repository directly
+    if let Ok(Some(git_root)) = crate::git::get_git_root() {
+        // Check if this git root is inside a -worktrees folder (it's a worktree)
+        if let Some(main_project) = find_main_project_from_worktree(&git_root) {
+            return Ok(main_project);
         }
-
-        // Then check in ./main/ subdirectory
-        // If found there, return the parent directory (project root), not ./main/ itself
-        if search_path.join("main").join("git-worktree-config.jsonc").exists() {
-            return Ok(search_path);
-        }
-
-        if !search_path.pop() {
-            break;
-        }
+        // Otherwise, this is the main project
+        return Ok(git_root);
     }
 
-    // No local config found, check for global config
+    // Strategy 2: Check if we're inside a -worktrees folder (but not in a git worktree)
+    if let Some(main_project) = find_main_project_from_worktrees_path(start_path) {
+        return Ok(main_project);
+    }
+
+    // Strategy 3: Check global config
     if let Ok(Some((_config_path, config))) = GitWorktreeConfig::find_config() {
-        // If global config has a project_path, use its parent as the project root
         if let Some(project_path) = config.project_path {
-            if let Some(parent) = project_path.parent() {
-                return Ok(parent.to_path_buf());
-            }
             return Ok(project_path);
         }
     }
 
-    // Check if we're in a git repository but missing config
-    if let Ok(Some(_)) = crate::git::get_git_root() {
-        Err(Error::Other(
-            "Found git repository but no config. Run 'gwt init' to initialize."
-                .to_string(),
-        ))
-    } else {
-        Err(Error::ProjectRootNotFound)
+    Err(Error::Other(
+        "Not in a git-worktree-cli project. Run 'gwt init' inside a git repository."
+            .to_string(),
+    ))
+}
+
+/// Check if a path is inside a -worktrees folder and return the main project path
+fn find_main_project_from_worktree(worktree_path: &Path) -> Option<PathBuf> {
+    // Walk up the path to see if any ancestor ends with -worktrees
+    for ancestor in worktree_path.ancestors() {
+        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
+            if name.ends_with("-worktrees") {
+                // Found worktrees folder, derive main project path
+                let main_name = name.trim_end_matches("-worktrees");
+                if let Some(parent) = ancestor.parent() {
+                    let main_project = parent.join(main_name);
+                    // Check if main_project itself has .git
+                    if main_project.join(".git").exists() {
+                        return Some(main_project);
+                    }
+                    // Also check if main_project contains a subdirectory with .git
+                    if let Ok(entries) = fs::read_dir(&main_project) {
+                        for entry in entries.flatten() {
+                            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                                let subdir = entry.path();
+                                if subdir.join(".git").exists() {
+                                    return Some(main_project);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+    None
+}
+
+/// Check if start_path is inside a -worktrees folder structure
+fn find_main_project_from_worktrees_path(start_path: &Path) -> Option<PathBuf> {
+    for ancestor in start_path.ancestors() {
+        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
+            if name.ends_with("-worktrees") {
+                let main_name = name.trim_end_matches("-worktrees");
+                if let Some(parent) = ancestor.parent() {
+                    let main_project = parent.join(main_name);
+                    // Check if main_project itself has .git
+                    if main_project.join(".git").exists() {
+                        return Some(main_project);
+                    }
+                    // Also check if main_project contains a subdirectory with .git
+                    // (handles structures like agent-tools/main/.git)
+                    if let Ok(entries) = fs::read_dir(&main_project) {
+                        for entry in entries.flatten() {
+                            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                                let subdir = entry.path();
+                                if subdir.join(".git").exists() {
+                                    return Some(main_project);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Find the .git directory within a project

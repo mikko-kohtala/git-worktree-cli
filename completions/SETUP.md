@@ -30,10 +30,10 @@ If you prefer manual installation, add the following to your `~/.zshrc`:
 
 ```bash
 # GWT completions
-if [[ -f ~/.git-worktree-cli/completions/gwt-completions.zsh ]]; then
-    fpath=(~/.git-worktree-cli/completions $fpath)
+if [[ -f ~/.config/git-worktree-cli/completions/gwt-completions.zsh ]]; then
+    fpath=(~/.config/git-worktree-cli/completions $fpath)
     autoload -Uz compinit && compinit
-    source ~/.git-worktree-cli/completions/gwt-completions.zsh
+    source ~/.config/git-worktree-cli/completions/gwt-completions.zsh
 fi
 ```
 
@@ -41,14 +41,14 @@ fi
 
 Generate bash completions:
 ```bash
-gwt completions bash > ~/.git-worktree-cli/completions/gwt-completions.bash
+gwt completions bash > ~/.config/git-worktree-cli/completions/gwt-completions.bash
 ```
 
 Add to your `~/.bashrc`:
 ```bash
 # GWT completions
-if [[ -f ~/.git-worktree-cli/completions/gwt-completions.bash ]]; then
-    source ~/.git-worktree-cli/completions/gwt-completions.bash
+if [[ -f ~/.config/git-worktree-cli/completions/gwt-completions.bash ]]; then
+    source ~/.config/git-worktree-cli/completions/gwt-completions.bash
 fi
 ```
 

@@ -17,6 +17,8 @@ pub struct GitWorktreeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_path: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktrees_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bitbucket_email: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hooks: Option<Hooks>,
@@ -39,6 +41,7 @@ impl GitWorktreeConfig {
         main_branch: String,
         provider: Provider,
         project_path: Option<PathBuf>,
+        worktrees_path: Option<PathBuf>,
     ) -> Self {
         // Convert provider enum to string
         let source_control = match provider {
@@ -53,6 +56,7 @@ impl GitWorktreeConfig {
             created_at: Utc::now(),
             source_control,
             project_path,
+            worktrees_path,
             bitbucket_email: None,
             hooks: Some(Hooks {
                 post_add: Some(vec![]),
@@ -60,6 +64,27 @@ impl GitWorktreeConfig {
                 post_remove: Some(vec![]),
             }),
         }
+    }
+
+    /// Derive worktrees path from project path (repo-name -> repo-name-worktrees)
+    pub fn derive_worktrees_path(project_path: &Path) -> PathBuf {
+        let repo_name = project_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("repo");
+        project_path
+            .parent()
+            .map(|p| p.join(format!("{}-worktrees", repo_name)))
+            .unwrap_or_else(|| project_path.join("worktrees"))
+    }
+
+    /// Get worktrees path, deriving from project_path if not stored
+    pub fn get_worktrees_path(&self) -> Option<PathBuf> {
+        self.worktrees_path.clone().or_else(|| {
+            self.project_path
+                .as_ref()
+                .map(|p| Self::derive_worktrees_path(p))
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -164,14 +189,14 @@ impl GitWorktreeConfig {
         Ok(None)
     }
 
-    /// Get the global config directory (~/.git-worktree-cli)
+    /// Get the global config directory (~/.config/git-worktree-cli)
     pub fn global_config_dir() -> Result<PathBuf> {
         dirs::home_dir()
             .ok_or_else(|| Error::config("Could not determine home directory"))
-            .map(|home| home.join(".git-worktree-cli"))
+            .map(|home| home.join(".config").join("git-worktree-cli"))
     }
 
-    /// Get the projects config directory (~/.git-worktree-cli/projects)
+    /// Get the projects config directory (~/.config/git-worktree-cli/projects)
     pub fn projects_config_dir() -> Result<PathBuf> {
         Self::global_config_dir().map(|d| d.join("projects"))
     }
@@ -275,6 +300,7 @@ mod tests {
             "main".to_string(),
             Provider::Github,
             None,
+            None,
         );
 
         assert_eq!(config.repository_url, "git@github.com:test/repo.git");
@@ -296,6 +322,7 @@ mod tests {
             "main".to_string(),
             Provider::BitbucketCloud,
             None,
+            None,
         );
 
         assert_eq!(config.repository_url, "https://bitbucket.org/workspace/repo.git");
@@ -310,6 +337,7 @@ mod tests {
             "https://bitbucket.company.com/scm/project/repo.git".to_string(),
             "main".to_string(),
             Provider::BitbucketDataCenter,
+            None,
             None,
         );
 
@@ -332,6 +360,7 @@ mod tests {
             "develop".to_string(),
             Provider::Github,
             None,
+            None,
         );
 
         // Save config
@@ -353,6 +382,7 @@ mod tests {
             "git@github.com:test/repo.git".to_string(),
             "main".to_string(),
             Provider::Github,
+            None,
             None,
         );
         config.save(&temp_dir.path().join(CONFIG_FILENAME)).unwrap();
