@@ -113,17 +113,16 @@ fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
     Ok((git_working_dir, target_path, project_root))
 }
 
-fn get_main_branch(project_root: &Path) -> Result<String> {
-    let config_path = project_root.join("git-worktree-config.jsonc");
-    if config_path.exists() {
-        let config = GitWorktreeConfig::load(&config_path)?;
-        Ok(config.main_branch)
+fn get_main_branch(_project_root: &Path) -> Result<String> {
+    // Try to find config (local or global)
+    if let Some((_config_path, config)) = GitWorktreeConfig::find_config()? {
+        return Ok(config.main_branch);
+    }
+
+    // Fallback to detecting from git if no config
+    if let Some(git_root) = git::get_git_root()? {
+        Ok(git::get_default_branch(&git_root)?)
     } else {
-        // Fallback to detecting from git if no config
-        if let Some(git_root) = git::get_git_root()? {
-            Ok(git::get_default_branch(&git_root)?)
-        } else {
-            Ok("main".to_string())
-        }
+        Ok("main".to_string())
     }
 }

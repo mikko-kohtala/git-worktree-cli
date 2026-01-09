@@ -3,6 +3,7 @@
 //! This module handles finding project roots, git directories, and managing
 //! project-related operations.
 
+use crate::config::GitWorktreeConfig;
 use crate::error::{Error, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,8 +48,9 @@ pub fn find_project_root() -> Result<PathBuf> {
 pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     let mut search_path = start_path.to_path_buf();
 
+    // First, check for local config by walking up the directory tree
     loop {
-        // First check in current directory
+        // Check in current directory
         if search_path.join("git-worktree-config.jsonc").exists() {
             // Special case: if current directory is named "main" and contains the config,
             // return the parent directory as the project root
@@ -71,10 +73,21 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
         }
     }
 
+    // No local config found, check for global config
+    if let Ok(Some((_config_path, config))) = GitWorktreeConfig::find_config() {
+        // If global config has a project_path, use its parent as the project root
+        if let Some(project_path) = config.project_path {
+            if let Some(parent) = project_path.parent() {
+                return Ok(parent.to_path_buf());
+            }
+            return Ok(project_path);
+        }
+    }
+
     // Check if we're in a git repository but missing config
     if let Ok(Some(_)) = crate::git::get_git_root() {
         Err(Error::Other(
-            "Found git repository but no git-worktree-config.jsonc. This doesn't appear to be a worktree project."
+            "Found git repository but no config. Run 'gwt init' to initialize."
                 .to_string(),
         ))
     } else {
