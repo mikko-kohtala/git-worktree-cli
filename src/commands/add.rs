@@ -136,9 +136,9 @@ fn get_main_branch(_project_root: &Path) -> Result<String> {
         return Ok(config.main_branch);
     }
 
-    // Fallback to detecting from git if no config
+    // Fallback to detecting from remote if no config
     if let Some(git_root) = git::get_git_root()? {
-        Ok(git::get_default_branch(&git_root)?)
+        Ok(git::get_remote_default_branch(&git_root)?)
     } else {
         Ok("main".to_string())
     }

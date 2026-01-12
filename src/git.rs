@@ -54,9 +54,38 @@ pub fn clone(repo_url: &str, target_dir: &str) -> Result<()> {
     execute_streaming(&["clone", repo_url, target_dir], None)
 }
 
-/// Get the default branch name of a repository
-pub fn get_default_branch(repo_path: &Path) -> Result<String> {
+/// Get the current branch name (the branch HEAD points to)
+pub fn get_current_branch(repo_path: &Path) -> Result<String> {
     execute_capture(&["symbolic-ref", "--short", "HEAD"], Some(repo_path))
+}
+
+/// Get the default branch name from the remote origin
+pub fn get_remote_default_branch(repo_path: &Path) -> Result<String> {
+    // Try git symbolic-ref refs/remotes/origin/HEAD
+    // Returns something like "refs/remotes/origin/master"
+    if let Ok(ref_output) = execute_capture(
+        &["symbolic-ref", "refs/remotes/origin/HEAD"],
+        Some(repo_path),
+    ) {
+        if let Some(branch) = ref_output.strip_prefix("refs/remotes/origin/") {
+            return Ok(branch.to_string());
+        }
+    }
+
+    // Fallback: check which common branches exist on origin
+    for branch in &["main", "master"] {
+        if let Ok(result) = execute_capture(
+            &["rev-parse", "--verify", &format!("origin/{}", branch)],
+            Some(repo_path),
+        ) {
+            if !result.is_empty() {
+                return Ok((*branch).to_string());
+            }
+        }
+    }
+
+    // Final fallback: use current branch (for repos without remote branches fetched)
+    get_current_branch(repo_path)
 }
 
 /// Add a new worktree

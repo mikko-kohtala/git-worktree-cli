@@ -23,9 +23,9 @@ pub fn run(local: bool) -> Result<()> {
 
     println!("{}", format!("✓ Detected provider: {:?}", detected_provider).green());
 
-    // Get the current branch name (this will be the main branch)
-    let current_branch = git::get_default_branch(&git_root)
-        .map_err(|e| Error::git(format!("Failed to get current branch: {}", e)))?;
+    // Get the default branch name from the remote
+    let current_branch = git::get_remote_default_branch(&git_root)
+        .map_err(|e| Error::git(format!("Failed to detect default branch: {}", e)))?;
 
     // Use the git root as the project path
     let project_path = git_root.canonicalize().unwrap_or_else(|_| git_root.clone());
