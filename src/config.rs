@@ -170,14 +170,21 @@ impl GitWorktreeConfig {
             }
         }
 
-        // Strategy 2: Search all configs for matching project_path
+        // Strategy 2: Search all configs for matching project_path or worktrees_path
         if let Ok(entries) = fs::read_dir(&projects_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().map(|e| e == "jsonc").unwrap_or(false) {
                     if let Ok(config) = Self::load(&path) {
+                        // Check project_path
                         if let Some(ref project_path) = config.project_path {
                             if start_dir.starts_with(project_path) {
+                                return Ok(Some((path, config)));
+                            }
+                        }
+                        // Also check worktrees_path
+                        if let Some(ref worktrees_path) = config.worktrees_path {
+                            if start_dir.starts_with(worktrees_path) {
                                 return Ok(Some((path, config)));
                             }
                         }
