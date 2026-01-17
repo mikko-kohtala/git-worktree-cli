@@ -19,21 +19,24 @@ When making code changes, increment the version in Cargo.toml:
 ## Architecture
 
 Single Rust binary providing git worktree management with these key modules:
-- `commands/`: Command implementations (init, add, list, remove)
-- `config.rs`: Configuration file handling  
-- `git.rs`: Git operations with streaming output
-- `hooks.rs`: Hook execution system
-- `completions.rs`: Embedded shell completions
+- `commands/`: CLI actions (init, add, list, remove, auth, completions)
+- `core/`: Project discovery and worktree layout helpers
+- `config.rs`: Config load/save, global/local discovery, worktrees path derivation
+- `git.rs`: Git operations with streaming output and worktree parsing
+- `hooks.rs`: Pre/post hook execution
+- `github.rs`, `bitbucket_*`: PR integrations and auth helpers
+- `completions.rs`: Completion content, install, and status checks
 
 ## Hooks System
 
-Hooks allow custom commands after worktree operations. Define in `git-worktree-config.jsonc`:
+Hooks allow custom commands around worktree operations. Define in `git-worktree-config.jsonc`:
 
 ```jsonc
 {
   "hooks": {
     "postAdd": ["npm install", "npm run init"],
-    "postRemove": ["echo 'Cleaned up ${branchName}'"]
+    "preRemove": ["echo Cleaning up ${branchName}"],
+    "postRemove": ["echo Removed ${worktreePath}"]
   }
 }
 ```
@@ -43,16 +46,17 @@ Variables: `${branchName}`, `${worktreePath}`
 ## Features
 
 All core functionality is implemented:
-- ✅ `gwt init` - Initialize from repository URLs with streaming output
-- ✅ `gwt add` - Create worktrees with hook execution
-- ✅ `gwt list` - Display worktrees with PR integration
-- ✅ `gwt remove` - Remove with safety checks
-- ✅ `gwt completions` - Auto-install shell completions
-- ✅ Multi-provider support (GitHub, Bitbucket)
+- ✅ `gwt init` - Detect provider from origin and write config (global or `--local`)
+- ✅ `gwt add` - Create worktrees under the derived `-worktrees` path and run hooks
+- ✅ `gwt list` - Show local worktrees with PR status (`--local` skips remote PRs)
+- ✅ `gwt remove` - Safe removal with `--force`, handles orphaned worktrees, runs hooks
+- ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center setup and test helpers
+- ✅ `gwt completions` - Status, install, and generate completions
+- ✅ Multi-provider support (GitHub, Bitbucket Cloud, Bitbucket Data Center)
 
 ## Testing
 
-Comprehensive test suite:
-- Integration tests with `assert_cmd`
-- Unit tests in source modules
-- Real git repository testing
+Targeted test coverage:
+- Integration tests for init flows and config path derivation using `assert_cmd`
+- Unit tests in `src/config.rs` and Bitbucket auth helpers
+- Integration tests create real git repos in temp directories
