@@ -1,5 +1,7 @@
 # Git Worktree CLI (gwt)
 
+Just a test
+
 **Tooling around git worktrees to make managing multiple branches easier**
 
 Work on multiple branches simultaneously without stashing or switching. Never lose context when switching between features. One repository, multiple working directories:
