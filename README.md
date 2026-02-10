@@ -44,14 +44,14 @@ gwt list
 # Local Worktrees:
 #
 # main
+#
+# feature/user-auth
 #   https://github.com/company/app/pull/42 (open)
 #   Add user auth
 #
-# feature/user-auth
-#
 # Open Pull Requests (no local worktree):
 # hotfix/login-bug
-#   https://github.com/company/app/pull/41 (merged)
+#   https://github.com/company/app/pull/43 (open)
 #   Fix login bug
 
 # Clean up finished work
@@ -67,7 +67,14 @@ gwt remove hotfix/login-bug
 - `gwt auth github` - Check GitHub auth (uses `gh`)
 - `gwt auth bitbucket-cloud [setup|test]` - Configure or test Bitbucket Cloud auth
 - `gwt auth bitbucket-data-center [setup|test]` - Configure or test Bitbucket Data Center auth
-- `gwt completions [install|generate <shell>]` - Status, install, or generate completions
+- `gwt completions` - Check completion installation status
+- `gwt completions install [shell]` - Install completions (auto-detects shell)
+- `gwt completions generate <shell>` - Output completion script to stdout
+- Supported shells: bash, zsh, fish, powershell, elvish
+
+## Configuration
+
+Config is stored globally by default at `~/.config/git-worktree-cli/projects/`. Use `gwt init --local` to store `git-worktree-config.jsonc` next to your repo instead.
 
 ## Automation
 

@@ -117,6 +117,21 @@ pub fn branch_exists(git_dir: &Path, branch_name: &str) -> Result<(bool, bool)> 
     Ok((!local.is_empty(), !remote.is_empty()))
 }
 
+/// Find a local branch with case-insensitive matching (for macOS compatibility)
+/// Returns the actual branch name if found, None otherwise
+pub fn find_local_branch_case_insensitive(git_dir: &Path, branch_name: &str) -> Result<Option<String>> {
+    let output = execute_capture(&["branch", "--list"], Some(git_dir)).unwrap_or_default();
+    let branch_lower = branch_name.to_lowercase();
+
+    for line in output.lines() {
+        let name = line.trim().trim_start_matches("* ");
+        if name.to_lowercase() == branch_lower {
+            return Ok(Some(name.to_string()));
+        }
+    }
+    Ok(None)
+}
+
 /// Get the current git root directory
 pub fn get_git_root() -> Result<Option<PathBuf>> {
     match execute_capture(&["rev-parse", "--show-toplevel"], None) {

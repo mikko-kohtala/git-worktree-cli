@@ -48,25 +48,41 @@ pub fn run(branch_name: &str) -> Result<()> {
             Some(&git_working_dir),
         )?;
     } else if remote_exists {
-        println!(
-            "{}",
-            format!(
-                "Branch '{}' exists remotely, checking out remote branch...",
-                branch_name
-            )
-            .yellow()
-        );
-        git::execute_streaming(
-            &[
-                "worktree",
-                "add",
-                target_path.to_str().unwrap(),
-                "-b",
-                branch_name,
-                &format!("origin/{}", branch_name),
-            ],
-            Some(&git_working_dir),
-        )?;
+        // Check for case-insensitive local branch match (macOS compatibility)
+        if let Some(existing_local) = git::find_local_branch_case_insensitive(&git_working_dir, branch_name)? {
+            println!(
+                "{}",
+                format!(
+                    "Branch '{}' exists locally (as '{}'), checking out existing branch...",
+                    branch_name, existing_local
+                )
+                .yellow()
+            );
+            git::execute_streaming(
+                &["worktree", "add", target_path.to_str().unwrap(), &existing_local],
+                Some(&git_working_dir),
+            )?;
+        } else {
+            println!(
+                "{}",
+                format!(
+                    "Branch '{}' exists remotely, checking out remote branch...",
+                    branch_name
+                )
+                .yellow()
+            );
+            git::execute_streaming(
+                &[
+                    "worktree",
+                    "add",
+                    target_path.to_str().unwrap(),
+                    "-b",
+                    branch_name,
+                    &format!("origin/{}", branch_name),
+                ],
+                Some(&git_working_dir),
+            )?;
+        }
     } else {
         println!(
             "{}",
