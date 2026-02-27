@@ -74,8 +74,7 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     }
 
     Err(Error::Other(
-        "Not in a git-worktree-cli project. Run 'gwt init' inside a git repository."
-            .to_string(),
+        "Not in a git-worktree-cli project. Run 'gwt init' inside a git repository.".to_string(),
     ))
 }
 
@@ -284,9 +283,7 @@ pub fn find_valid_git_directory(project_root: &Path) -> Result<PathBuf> {
         }
     }
 
-    Err(Error::Other(
-        "No valid git directory found in project".to_string()
-    ))
+    Err(Error::Other("No valid git directory found in project".to_string()))
 }
 
 /// Clean a branch name by removing refs/heads/ prefix

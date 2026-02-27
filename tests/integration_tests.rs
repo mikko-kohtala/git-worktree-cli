@@ -28,7 +28,9 @@ fn test_gwt_init_existing_repo() {
     // Check that the command outputs expected messages
     output
         .stdout(predicate::str::contains("Detected provider: Github"))
-        .stdout(predicate::str::contains("✓ Repository: git@github.com:test/my-repo.git"))
+        .stdout(predicate::str::contains(
+            "✓ Repository: git@github.com:test/my-repo.git",
+        ))
         .stdout(predicate::str::contains("✓ Project path:"))
         .stdout(predicate::str::contains("✓ Worktrees path:"))
         .stdout(predicate::str::contains("my-repo-worktrees"))

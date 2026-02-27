@@ -3,7 +3,10 @@ use std::io::{self, Write};
 
 use crate::{
     constants,
-    core::project::{clean_branch_name, find_git_directory, find_project_root_from, is_orphaned_worktree, find_valid_git_directory, find_project_root},
+    core::project::{
+        clean_branch_name, find_git_directory, find_project_root, find_project_root_from, find_valid_git_directory,
+        is_orphaned_worktree,
+    },
     error::{Error, Result},
     git, hooks,
 };
@@ -319,7 +322,10 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
 
     // Ask for confirmation unless --force is used
     if !force {
-        print!("\n{}", "Are you sure you want to remove this orphaned worktree? (y/N): ".cyan());
+        print!(
+            "\n{}",
+            "Are you sure you want to remove this orphaned worktree? (y/N): ".cyan()
+        );
         io::stdout().flush()?;
 
         let mut input = String::new();
@@ -341,13 +347,8 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
 
     // Remove the directory
     println!("\n{}", "Removing orphaned worktree directory...".cyan());
-    fs::remove_dir_all(worktree_path).map_err(|e| {
-        Error::msg(format!(
-            "Failed to remove directory {}: {}",
-            worktree_path.display(),
-            e
-        ))
-    })?;
+    fs::remove_dir_all(worktree_path)
+        .map_err(|e| Error::msg(format!("Failed to remove directory {}: {}", worktree_path.display(), e)))?;
 
     println!(
         "{}",
@@ -362,10 +363,7 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
                 println!("{}", "✓ Worktree references pruned".green());
             }
             Err(e) => {
-                println!(
-                    "{}",
-                    format!("⚠️  Failed to prune worktree references: {}", e).yellow()
-                );
+                println!("{}", format!("⚠️  Failed to prune worktree references: {}", e).yellow());
             }
         }
     }
@@ -377,7 +375,10 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
         );
     }
 
-    println!("\n{}", "Note: Orphaned worktree removed. Hooks were skipped due to invalid git state.".dimmed());
+    println!(
+        "\n{}",
+        "Note: Orphaned worktree removed. Hooks were skipped due to invalid git state.".dimmed()
+    );
 
     Ok(())
 }

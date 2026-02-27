@@ -63,10 +63,7 @@ pub fn get_current_branch(repo_path: &Path) -> Result<String> {
 pub fn get_remote_default_branch(repo_path: &Path) -> Result<String> {
     // Try git symbolic-ref refs/remotes/origin/HEAD
     // Returns something like "refs/remotes/origin/master"
-    if let Ok(ref_output) = execute_capture(
-        &["symbolic-ref", "refs/remotes/origin/HEAD"],
-        Some(repo_path),
-    ) {
+    if let Ok(ref_output) = execute_capture(&["symbolic-ref", "refs/remotes/origin/HEAD"], Some(repo_path)) {
         if let Some(branch) = ref_output.strip_prefix("refs/remotes/origin/") {
             return Ok(branch.to_string());
         }

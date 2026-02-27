@@ -68,10 +68,7 @@ impl GitWorktreeConfig {
 
     /// Derive worktrees path from project path (repo-name -> repo-name-worktrees)
     pub fn derive_worktrees_path(project_path: &Path) -> PathBuf {
-        let repo_name = project_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("repo");
+        let repo_name = project_path.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
         project_path
             .parent()
             .map(|p| p.join(format!("{}-worktrees", repo_name)))
@@ -80,11 +77,9 @@ impl GitWorktreeConfig {
 
     /// Get worktrees path, deriving from project_path if not stored
     pub fn get_worktrees_path(&self) -> Option<PathBuf> {
-        self.worktrees_path.clone().or_else(|| {
-            self.project_path
-                .as_ref()
-                .map(|p| Self::derive_worktrees_path(p))
-        })
+        self.worktrees_path
+            .clone()
+            .or_else(|| self.project_path.as_ref().map(|p| Self::derive_worktrees_path(p)))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {

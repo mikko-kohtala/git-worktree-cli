@@ -18,8 +18,7 @@ pub fn run(local: bool) -> Result<()> {
         .ok_or_else(|| Error::git("No remote 'origin' found. Please add a remote first."))?;
 
     // Detect the repository provider
-    let detected_provider = detect_provider_from_url(&repo_url)
-        .ok_or_else(|| create_provider_error(&repo_url))?;
+    let detected_provider = detect_provider_from_url(&repo_url).ok_or_else(|| create_provider_error(&repo_url))?;
 
     println!("{}", format!("✓ Detected provider: {:?}", detected_provider).green());
 
