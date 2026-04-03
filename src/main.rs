@@ -3,7 +3,7 @@ use colored::Colorize;
 
 use git_worktree_cli::{
     cli::{AuthAction, Cli, Commands, CompletionAction},
-    commands::{add, auth, init, list, remove},
+    commands::{add, auth, config, init, list, remove},
     completions,
     error::Result,
 };
@@ -35,6 +35,9 @@ fn main() -> Result<()> {
                 auth::run_bitbucket_data_center(action)?;
             }
         },
+        Commands::Config => {
+            config::run()?;
+        }
         Commands::Completions { action } => {
             handle_completions(action)?;
         }

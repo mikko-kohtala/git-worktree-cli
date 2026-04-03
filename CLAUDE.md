@@ -16,10 +16,12 @@ When making code changes, increment the version in Cargo.toml:
 - Minor version (x.N.x) for new features
 - Major version (N.x.x) for breaking changes
 
+After committing, tag the version: `git tag v<version>` (e.g., `git tag v0.9.0`)
+
 ## Architecture
 
 Single Rust binary providing git worktree management with these key modules:
-- `commands/`: CLI actions (init, add, list, remove, auth, completions)
+- `commands/`: CLI actions (init, add, list, remove, config, auth, completions)
 - `core/`: Project discovery and worktree layout helpers
 - `config.rs`: Config load/save, global/local discovery, worktrees path derivation
 - `git.rs`: Git operations with streaming output and worktree parsing
@@ -50,6 +52,7 @@ All core functionality is implemented:
 - ✅ `gwt add` - Create worktrees under the derived `-worktrees` path and run hooks
 - ✅ `gwt list` - Show local worktrees with PR status (`--local` skips remote PRs)
 - ✅ `gwt remove` - Safe removal with `--force`, handles orphaned worktrees, runs hooks
+- ✅ `gwt config` - Open the project config file in the default application
 - ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center setup and test helpers
 - ✅ `gwt completions` - Status, install, and generate completions
 - ✅ Multi-provider support (GitHub, Bitbucket Cloud, Bitbucket Data Center)

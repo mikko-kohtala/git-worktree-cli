@@ -240,4 +240,15 @@ to stdout (useful for piping or manual installation).")]
         #[command(subcommand)]
         action: Option<CompletionAction>,
     },
+
+    /// Open the project config file
+    #[command(long_about = "\
+Open the project config file in the default application.
+
+Finds the config file (local or global) for the current repository
+and opens it with the system default application (e.g., your text editor).
+
+Local config:  ./git-worktree-config.jsonc
+Global config: ~/.config/git-worktree-cli/projects/<repo>.jsonc")]
+    Config,
 }
