@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use colored::Colorize;
 
 use git_worktree_cli::{
@@ -11,7 +11,15 @@ use git_worktree_cli::{
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
+    let command = match cli.command {
+        Some(cmd) => cmd,
+        None => {
+            Cli::command().print_long_help().ok();
+            return Ok(());
+        }
+    };
+
+    match command {
         Commands::Init { local } => {
             init::run(local)?;
         }

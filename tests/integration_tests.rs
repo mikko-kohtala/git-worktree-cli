@@ -92,6 +92,18 @@ fn test_gwt_init_no_remote() {
 }
 
 #[test]
+fn test_gwt_no_args_shows_long_help() {
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Typical workflow"))
+        .stdout(predicate::str::contains("EXAMPLES"))
+        .stdout(predicate::str::contains("CONFIG"))
+        .stdout(predicate::str::contains("PROVIDERS"));
+}
+
+#[test]
 fn test_gwt_help() {
     let mut cmd = Command::cargo_bin("gwt").unwrap();
     cmd.arg("--help");

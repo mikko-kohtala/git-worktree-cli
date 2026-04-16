@@ -60,7 +60,7 @@ pub struct Cli {
     pub version: (),
 
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
