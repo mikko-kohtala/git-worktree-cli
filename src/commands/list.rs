@@ -12,6 +12,7 @@ use crate::{
 
 struct WorktreeDisplay {
     branch: String,
+    path: String,
     pr_info: Option<PullRequestInfo>,
 }
 
@@ -180,7 +181,11 @@ pub async fn run(local_only: bool) -> Result<()> {
             None
         };
 
-        display_worktrees.push(WorktreeDisplay { branch, pr_info });
+        display_worktrees.push(WorktreeDisplay {
+            branch,
+            path: wt.path.display().to_string(),
+            pr_info,
+        });
     }
 
     // Display local worktrees
@@ -315,6 +320,9 @@ pub async fn run(local_only: bool) -> Result<()> {
 fn display_worktree(worktree: &WorktreeDisplay) {
     // Display branch name in cyan
     println!("{}", worktree.branch.cyan());
+
+    // Display worktree directory
+    println!("  {}", worktree.path.dimmed());
 
     // Display PR info if available
     if let Some(ref pr_info) = worktree.pr_info {
