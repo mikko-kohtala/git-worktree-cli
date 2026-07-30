@@ -193,14 +193,16 @@ before proceeding unless --force is used.
 If the branch has unmerged changes, asks again before force-deleting
 the branch. Use --force to skip all confirmation prompts.
 
-If no branch name is given, removes the worktree for the current
-directory. Also handles orphaned worktrees with stale git references.
+If no branch name is given, shows an interactive list of worktrees
+where one or more can be selected for removal (space to toggle,
+enter to confirm). Also handles orphaned worktrees with stale git
+references.
 
 Runs preRemove hooks before removal and postRemove hooks after.
 
 NOTE: --force is required for non-interactive (AI agent) usage.")]
     Remove {
-        /// Branch name to remove (current worktree if not specified)
+        /// Branch name to remove (interactive selection if not specified)
         branch_name: Option<String>,
         /// Skip confirmation prompts
         #[arg(short, long)]

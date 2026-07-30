@@ -1,13 +1,13 @@
 use colored::Colorize;
 
 use super::list_helpers::{
-    extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, fetch_pr_for_branch, PullRequestInfo,
+    colored_pr_status, extract_bitbucket_cloud_url, extract_bitbucket_data_center_url, PrContext, PullRequestInfo,
 };
 use crate::{
-    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
+    config,
     core::project::{clean_branch_name, find_git_directory},
     error::Result,
-    git, github,
+    git,
 };
 
 struct WorktreeDisplay {
@@ -35,106 +35,8 @@ pub async fn run(local_only: bool) -> Result<()> {
     }
 
     // Try to get GitHub/Bitbucket info automatically
-    let (github_client, bitbucket_client, bitbucket_data_center_client, repo_info) = {
-        let github_client = github::GitHubClient::new();
-        let mut bitbucket_client: Option<bitbucket_api::BitbucketClient> = None;
-        let mut bitbucket_data_center_client: Option<bitbucket_data_center_api::BitbucketDataCenterClient> = None;
-
-        if let Some((_, config)) = config::GitWorktreeConfig::find_config()? {
-            let repo_url = &config.repository_url;
-
-            // Use the configured sourceControl instead of URL pattern matching
-            match config.source_control.as_str() {
-                "bitbucket-cloud" => {
-                    if let Some((workspace, repo)) = bitbucket_api::extract_bitbucket_info_from_url(repo_url) {
-                        // Try to get Bitbucket Cloud auth
-                        if let Ok(auth) = bitbucket_auth::BitbucketAuth::new(
-                            workspace.clone(),
-                            repo.clone(),
-                            config.bitbucket_email.clone(),
-                        ) {
-                            if auth.has_stored_token() {
-                                bitbucket_client = Some(bitbucket_api::BitbucketClient::new(auth));
-                            }
-                        }
-                        (
-                            Some(github_client),
-                            bitbucket_client,
-                            None,
-                            Some(("bitbucket-cloud".to_string(), workspace, repo)),
-                        )
-                    } else {
-                        (Some(github_client), None, None, None)
-                    }
-                }
-                "bitbucket-data-center" => {
-                    // Always use get_auth_from_config for bitbucket-data-center since it can derive the API URL
-                    if let Ok((base_url, project_key, repo_slug)) = bitbucket_data_center_auth::get_auth_from_config() {
-                        if let Ok(auth) = bitbucket_data_center_auth::BitbucketDataCenterAuth::new(
-                            project_key.clone(),
-                            repo_slug.clone(),
-                            base_url.clone(),
-                        ) {
-                            if auth.get_token().is_ok() {
-                                bitbucket_data_center_client = Some(
-                                    bitbucket_data_center_api::BitbucketDataCenterClient::new(auth, base_url),
-                                );
-                            }
-                        }
-                        (
-                            Some(github_client),
-                            None,
-                            bitbucket_data_center_client,
-                            Some(("bitbucket-data-center".to_string(), project_key, repo_slug)),
-                        )
-                    } else {
-                        // Could not get auth config - extract repo info for display but no client
-                        let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
-                            .unwrap_or_else(|| ("".to_string(), "".to_string()));
-                        if !owner.is_empty() && !repo.is_empty() {
-                            (
-                                Some(github_client),
-                                None,
-                                None,
-                                Some(("bitbucket-data-center".to_string(), owner, repo)),
-                            )
-                        } else {
-                            (Some(github_client), None, None, None)
-                        }
-                    }
-                }
-                _ => {
-                    // Try GitHub
-                    let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
-                        .unwrap_or_else(|| ("".to_string(), "".to_string()));
-
-                    if !owner.is_empty() && !repo.is_empty() {
-                        (
-                            Some(github_client),
-                            None,
-                            None,
-                            Some(("github".to_string(), owner, repo)),
-                        )
-                    } else {
-                        (Some(github_client), None, None, None)
-                    }
-                }
-            }
-        } else {
-            (Some(github_client), None, None, None)
-        }
-    };
-
-    let has_pr_info = repo_info.is_some()
-        && match &repo_info {
-            Some((platform, _, _)) => match platform.as_str() {
-                "github" => github_client.as_ref().map(|c| c.has_auth()).unwrap_or(false),
-                "bitbucket-cloud" => bitbucket_client.is_some(),
-                "bitbucket-data-center" => bitbucket_data_center_client.is_some(),
-                _ => false,
-            },
-            None => false,
-        };
+    let ctx = PrContext::detect()?;
+    let has_pr_info = ctx.has_pr_info();
 
     // Get local branch names for filtering
     let local_branches: Vec<String> = worktrees
@@ -160,23 +62,7 @@ pub async fn run(local_only: bool) -> Result<()> {
 
         // Fetch PR info if available
         let pr_info = if has_pr_info && !wt.bare && branch != "(bare)" {
-            match &repo_info {
-                Some((platform, owner_or_workspace, repo)) => {
-                    let pr_result = fetch_pr_for_branch(
-                        platform,
-                        owner_or_workspace,
-                        repo,
-                        &branch,
-                        &github_client,
-                        &bitbucket_client,
-                        &bitbucket_data_center_client,
-                    )
-                    .await;
-
-                    pr_result.unwrap_or_default()
-                }
-                None => None,
-            }
+            ctx.fetch_pr(&branch).await
         } else {
             None
         };
@@ -202,10 +88,10 @@ pub async fn run(local_only: bool) -> Result<()> {
     let mut remote_prs: Vec<RemotePullRequest> = Vec::new();
 
     if has_pr_info && !local_only {
-        if let Some((platform, owner_or_workspace, repo)) = &repo_info {
+        if let Some((platform, owner_or_workspace, repo)) = &ctx.repo_info {
             match platform.as_str() {
                 "github" => {
-                    if let Some(ref client) = github_client {
+                    if let Some(ref client) = ctx.github_client {
                         if let Ok(all_prs) = client.get_all_pull_requests(owner_or_workspace, repo) {
                             for (pr, branch_name) in all_prs {
                                 // Skip if we already have a local worktree for this branch
@@ -225,7 +111,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                     }
                 }
                 "bitbucket-cloud" => {
-                    if let Some(ref client) = bitbucket_client {
+                    if let Some(ref client) = ctx.bitbucket_client {
                         if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
                             for pr in all_prs {
                                 // Only include open PRs
@@ -249,7 +135,7 @@ pub async fn run(local_only: bool) -> Result<()> {
                     }
                 }
                 "bitbucket-data-center" => {
-                    if let Some(ref client) = bitbucket_data_center_client {
+                    if let Some(ref client) = ctx.bitbucket_data_center_client {
                         if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
                             for pr in all_prs {
                                 // Only include open PRs
@@ -327,14 +213,11 @@ fn display_worktree(worktree: &WorktreeDisplay) {
     // Display PR info if available
     if let Some(ref pr_info) = worktree.pr_info {
         // Display URL with status
-        let status_colored = match pr_info.status.as_str() {
-            "OPEN" => "open".green(),
-            "CLOSED" => "closed".red(),
-            "MERGED" => "merged".green(),
-            "DRAFT" => "draft".yellow(),
-            _ => pr_info.status.normal(),
-        };
-        println!("  {} ({})", pr_info.url.blue().underline(), status_colored);
+        println!(
+            "  {} ({})",
+            pr_info.url.blue().underline(),
+            colored_pr_status(&pr_info.status)
+        );
 
         // Display title if not empty
         if !pr_info.title.is_empty() {
@@ -349,14 +232,11 @@ fn display_remote_pr(pr: &RemotePullRequest) {
     println!("{}", pr.branch.cyan());
 
     // Display URL with status
-    let status_colored = match pr.pr_info.status.as_str() {
-        "OPEN" => "open".green(),
-        "CLOSED" => "closed".red(),
-        "MERGED" => "merged".green(),
-        "DRAFT" => "draft".yellow(),
-        _ => pr.pr_info.status.normal(),
-    };
-    println!("  {} ({})", pr.pr_info.url.blue().underline(), status_colored);
+    println!(
+        "  {} ({})",
+        pr.pr_info.url.blue().underline(),
+        colored_pr_status(&pr.pr_info.status)
+    );
 
     // Display title
     if !pr.pr_info.title.is_empty() {
