@@ -193,9 +193,10 @@ before proceeding unless --force is used.
 If the branch has unmerged changes, asks again before force-deleting
 the branch. Use --force to skip all confirmation prompts.
 
-If no branch name is given, shows an interactive list of worktrees
-where one or more can be selected for removal (space to toggle,
-enter to confirm). Also handles orphaned worktrees with stale git
+If no branch name is given, opens an interactive picker listing all
+worktrees with their PR status. Navigate with arrow keys or j/k,
+select one or more with space (a toggles all), confirm with enter,
+cancel with q or esc. Also handles orphaned worktrees with stale git
 references.
 
 Runs preRemove hooks before removal and postRemove hooks after.

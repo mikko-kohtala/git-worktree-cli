@@ -1,5 +1,17 @@
 use colored::Colorize;
-use dialoguer::{theme::ColorfulTheme, MultiSelect};
+use ratatui::{
+    backend::CrosstermBackend,
+    crossterm::{
+        event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    },
+    layout::{Constraint, Layout},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    Frame, Terminal,
+};
 use std::io::{self, IsTerminal, Write};
 
 use super::list_helpers::{colored_pr_status, PrContext, PullRequestInfo};
@@ -64,22 +76,9 @@ fn run_interactive(git_dir: &std::path::Path, worktrees: Vec<git::Worktree>, for
     let pr_infos = fetch_pr_statuses(&removable);
 
     let current_dir = std::env::current_dir()?;
+    let rows = build_picker_rows(&removable, &pr_infos, &current_dir);
 
-    // Every item must fit on a single terminal row and the list must fit on
-    // the screen, otherwise dialoguer's cursor math breaks and the list
-    // jumps around while scrolling.
-    let (term_rows, term_cols) = console::Term::stderr().size();
-    let items = build_picker_items(&removable, &pr_infos, &current_dir, term_cols as usize);
-    let max_visible = (term_rows as usize).saturating_sub(2).max(3);
-
-    let selection = MultiSelect::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select worktrees to remove (space to toggle, enter to confirm)")
-        .items(&items)
-        .max_length(max_visible)
-        .interact_opt()
-        .map_err(|e| Error::msg(format!("Selection failed: {}", e)))?;
-
-    let indices = match selection {
+    let indices = match pick_worktrees(&rows)? {
         Some(indices) if !indices.is_empty() => indices,
         Some(_) => {
             println!("{}", "No worktrees selected.".yellow());
@@ -138,91 +137,194 @@ fn run_interactive(git_dir: &std::path::Path, worktrees: Vec<git::Worktree>, for
     Ok(())
 }
 
-/// Terminal columns dialoguer's theme uses for its own item prefix ("❯ ✔ ")
-const PICKER_PREFIX_WIDTH: usize = 4;
+const CURRENT_LABEL: &str = " (current)";
+const COLUMN_GAP: usize = 2;
 
-/// Build colored, column-aligned lines for the interactive picker.
-/// Padding is computed on the plain text before colors are applied,
-/// since ANSI escape codes would break format-width alignment.
-/// Each line is kept within `term_width` (dialoguer cannot redraw
-/// wrapped lines correctly, making the list jump while scrolling).
-fn build_picker_items(
+/// One row in the interactive picker
+struct PickerRow {
+    branch: String,
+    current: bool,
+    status: Option<String>,
+    path: String,
+}
+
+fn build_picker_rows(
     worktrees: &[git::Worktree],
     pr_infos: &[Option<PullRequestInfo>],
     current_dir: &std::path::Path,
-    term_width: usize,
-) -> Vec<String> {
-    const CURRENT_LABEL: &str = " (current)";
-    const COLUMN_GAP: usize = 2;
-    const MIN_PATH_WIDTH: usize = 10;
-
-    let branch_width = worktrees
+) -> Vec<PickerRow> {
+    worktrees
         .iter()
-        .map(|wt| {
-            let current_len = if current_dir.starts_with(&wt.path) {
-                CURRENT_LABEL.len()
-            } else {
-                0
-            };
-            get_branch_display(wt).len() + current_len
+        .zip(pr_infos)
+        .map(|(wt, pr_info)| PickerRow {
+            branch: get_branch_display(wt).to_string(),
+            current: current_dir.starts_with(&wt.path),
+            status: pr_info.as_ref().map(|pr| pr.status.clone()),
+            path: display_path(&wt.path),
+        })
+        .collect()
+}
+
+/// Widths of the branch (including the current marker) and status columns
+fn column_widths(rows: &[PickerRow]) -> (usize, usize) {
+    let branch_width = rows
+        .iter()
+        .map(|row| {
+            let current_len = if row.current { CURRENT_LABEL.len() } else { 0 };
+            row.branch.chars().count() + current_len
         })
         .max()
         .unwrap_or(0);
 
     // Status column is only shown when at least one worktree has PR info
-    let status_width = pr_infos
+    let status_width = rows
         .iter()
-        .map(|pr| pr.as_ref().map(|p| p.status.len()).unwrap_or(0))
+        .map(|row| row.status.as_ref().map(|s| s.len()).unwrap_or(0))
         .max()
         .unwrap_or(0);
 
-    let available = term_width.saturating_sub(PICKER_PREFIX_WIDTH);
-    let status_column_width = if status_width > 0 { status_width + COLUMN_GAP } else { 0 };
+    (branch_width, status_width)
+}
 
-    // On narrow terminals the branch column gives way first, then the path;
-    // long branch names get truncated so the line never wraps
-    let branch_width_max = available.saturating_sub(COLUMN_GAP + status_column_width + MIN_PATH_WIDTH);
-    let branch_width = branch_width.min(branch_width_max);
+fn status_style(status: &str) -> Style {
+    let color = match status {
+        "OPEN" | "MERGED" => Color::Green,
+        "DRAFT" => Color::Yellow,
+        "CLOSED" => Color::Red,
+        _ => Color::White,
+    };
+    Style::default().fg(color)
+}
 
-    // Whatever is left after the branch and status columns belongs to the path
-    let path_budget = available.saturating_sub(branch_width + COLUMN_GAP + status_column_width);
+/// Render one picker row as a column-aligned styled line
+fn picker_line(
+    row: &PickerRow,
+    selected: bool,
+    branch_width: usize,
+    status_width: usize,
+    path_budget: usize,
+) -> Line<'static> {
+    let checkbox = if selected {
+        Span::styled("[x] ".to_string(), Style::default().fg(Color::Green))
+    } else {
+        Span::raw("[ ] ".to_string())
+    };
 
-    worktrees
+    let current_label = if row.current { CURRENT_LABEL } else { "" };
+    let label_width = row.branch.chars().count() + current_label.len();
+    let branch_pad = " ".repeat(branch_width.saturating_sub(label_width) + COLUMN_GAP);
+
+    let mut spans = vec![
+        checkbox,
+        Span::styled(row.branch.clone(), Style::default().fg(Color::Cyan)),
+        Span::styled(current_label.to_string(), Style::default().fg(Color::Yellow)),
+        Span::raw(branch_pad),
+    ];
+
+    if status_width > 0 {
+        let status = row.status.clone().unwrap_or_default().to_lowercase();
+        let status_pad = " ".repeat(status_width.saturating_sub(status.chars().count()) + COLUMN_GAP);
+        spans.push(Span::styled(status, status_style(row.status.as_deref().unwrap_or(""))));
+        spans.push(Span::raw(status_pad));
+    }
+
+    spans.push(Span::styled(
+        truncate_left(&row.path, path_budget),
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    Line::from(spans)
+}
+
+/// Run the full-screen worktree picker. Returns the selected indices,
+/// or None if the user cancelled.
+fn pick_worktrees(rows: &[PickerRow]) -> Result<Option<Vec<usize>>> {
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let result = picker_loop(&mut terminal, rows);
+
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+
+    result
+}
+
+fn picker_loop(
+    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
+    rows: &[PickerRow],
+) -> Result<Option<Vec<usize>>> {
+    let mut selected = vec![false; rows.len()];
+    let mut cursor: usize = 0;
+    let mut list_state = ListState::default();
+
+    loop {
+        list_state.select(Some(cursor));
+        terminal.draw(|frame| render_picker(frame, rows, &selected, &mut list_state))?;
+
+        let Event::Key(key) = event::read()? else {
+            continue;
+        };
+        if key.kind != KeyEventKind::Press {
+            continue;
+        }
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(None);
+        }
+
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => cursor = cursor.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => cursor = (cursor + 1).min(rows.len() - 1),
+            KeyCode::Home => cursor = 0,
+            KeyCode::End => cursor = rows.len() - 1,
+            KeyCode::Char(' ') => selected[cursor] = !selected[cursor],
+            KeyCode::Char('a') => {
+                let select_all = !selected.iter().all(|s| *s);
+                selected.iter_mut().for_each(|s| *s = select_all);
+            }
+            KeyCode::Enter => {
+                return Ok(Some(
+                    selected
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, s)| s.then_some(i))
+                        .collect(),
+                ));
+            }
+            KeyCode::Esc | KeyCode::Char('q') => return Ok(None),
+            _ => {}
+        }
+    }
+}
+
+fn render_picker(frame: &mut Frame, rows: &[PickerRow], selected: &[bool], list_state: &mut ListState) {
+    let [list_area, help_area] = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).areas(frame.area());
+
+    let (branch_width, status_width) = column_widths(rows);
+    // Borders (2) + highlight symbol (2) + checkbox (4) + fixed columns;
+    // whatever is left belongs to the path
+    let fixed = 2 + 2 + 4 + branch_width + COLUMN_GAP + if status_width > 0 { status_width + COLUMN_GAP } else { 0 };
+    let path_budget = (list_area.width as usize).saturating_sub(fixed);
+
+    let items: Vec<ListItem> = rows
         .iter()
-        .zip(pr_infos)
-        .map(|(wt, pr_info)| {
-            let is_current = current_dir.starts_with(&wt.path);
-            let current_label = if is_current { CURRENT_LABEL } else { "" };
+        .zip(selected)
+        .map(|(row, sel)| ListItem::new(picker_line(row, *sel, branch_width, status_width, path_budget)))
+        .collect();
 
-            let branch = truncate_right(get_branch_display(wt), branch_width.saturating_sub(current_label.len()));
+    let list = List::new(items)
+        .block(Block::default().borders(Borders::ALL).title(" Remove worktrees "))
+        .highlight_symbol("❯ ")
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
-            let branch_pad =
-                " ".repeat(branch_width.saturating_sub(branch.chars().count() + current_label.len()) + COLUMN_GAP);
+    frame.render_stateful_widget(list, list_area, list_state);
 
-            let status_column = if status_width > 0 {
-                let status_len = pr_info.as_ref().map(|p| p.status.len()).unwrap_or(0);
-                let status_pad = " ".repeat(status_width - status_len + COLUMN_GAP);
-                let status = match pr_info {
-                    Some(pr) => colored_pr_status(&pr.status).to_string(),
-                    None => String::new(),
-                };
-                format!("{}{}", status, status_pad)
-            } else {
-                String::new()
-            };
-
-            let path = truncate_left(&display_path(&wt.path), path_budget);
-
-            format!(
-                "{}{}{}{}{}",
-                branch.cyan(),
-                current_label.yellow(),
-                branch_pad,
-                status_column,
-                path.dimmed()
-            )
-        })
-        .collect()
+    let help = Paragraph::new("↑/↓/j/k move · space toggle · a all · enter confirm · q/esc cancel")
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(help, help_area);
 }
 
 /// Render a path with the home directory shortened to `~`
@@ -234,20 +336,6 @@ fn display_path(path: &std::path::Path) -> String {
         }
     }
     displayed
-}
-
-/// Truncate a string to `max_width` characters, keeping the head
-/// (the most informative part of a branch name) before a trailing ellipsis
-fn truncate_right(text: &str, max_width: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= max_width {
-        return text.to_string();
-    }
-    if max_width == 0 {
-        return String::new();
-    }
-    let head: String = chars[..max_width - 1].iter().collect();
-    format!("{}…", head)
 }
 
 /// Truncate a string to `max_width` characters, keeping the tail
@@ -667,71 +755,104 @@ mod tests {
         assert_eq!(truncate_left("abc", 1), "…");
     }
 
+    fn line_text(line: &Line) -> String {
+        line.spans.iter().map(|span| span.content.as_ref()).collect()
+    }
+
     #[test]
-    fn picker_items_fit_terminal_width() {
+    fn picker_rows_capture_current_and_status() {
         let worktrees = vec![
-            worktree("/Users/someone/code/salimake", "main"),
+            worktree("/somewhere/code/salimake", "main"),
             worktree(
-                "/Users/someone/code/salimake-worktrees/decline-machine-press-images",
+                "/somewhere/code/salimake-worktrees/decline-machine-press-images",
                 "decline-machine-press-images",
             ),
-            worktree("/Users/someone/code/salimake-worktrees/watch-summary", "watch-summary"),
         ];
-        let pr_infos = vec![None, pr("OPEN"), pr("MERGED")];
-        let current_dir = worktrees[0].path.clone();
+        let pr_infos = vec![None, pr("OPEN")];
 
-        for term_width in [40, 60, 80, 120] {
-            let items = build_picker_items(&worktrees, &pr_infos, &current_dir, term_width);
-            for item in &items {
-                let visible = console::measure_text_width(item);
-                assert!(
-                    visible + PICKER_PREFIX_WIDTH <= term_width,
-                    "item too wide for {}-col terminal ({} cols): {}",
-                    term_width,
-                    visible,
-                    item
-                );
-            }
-        }
-    }
+        let rows = build_picker_rows(&worktrees, &pr_infos, &worktrees[0].path.clone());
 
-    #[test]
-    fn picker_items_keep_path_tails_when_truncated() {
-        let worktrees = vec![worktree(
-            "/Users/someone/code/salimake-worktrees/decline-machine-press-images",
-            "decline-machine-press-images",
-        )];
-        let pr_infos = vec![None];
-
-        let items = build_picker_items(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"), 60);
-        let plain = console::strip_ansi_codes(&items[0]).to_string();
-        assert!(
-            plain.contains("machine-press-images"),
-            "truncated path should keep its tail: {}",
-            plain
+        assert!(rows[0].current);
+        assert!(!rows[1].current);
+        assert_eq!(rows[0].status, None);
+        assert_eq!(rows[1].status, Some("OPEN".to_string()));
+        assert_eq!(rows[1].branch, "decline-machine-press-images");
+        assert_eq!(
+            rows[1].path,
+            "/somewhere/code/salimake-worktrees/decline-machine-press-images"
         );
-        assert!(plain.contains('…'), "long path should be truncated: {}", plain);
     }
 
     #[test]
-    fn picker_items_align_columns() {
+    fn picker_lines_align_columns() {
         let worktrees = vec![
             worktree("/repo", "main"),
             worktree("/repo-worktrees/a-much-longer-branch-name", "a-much-longer-branch-name"),
         ];
         let pr_infos = vec![pr("OPEN"), pr("MERGED")];
+        let rows = build_picker_rows(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"));
 
-        let items = build_picker_items(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"), 120);
-        let path_columns: Vec<usize> = items
+        let (branch_width, status_width) = column_widths(&rows);
+        let lines: Vec<String> = rows
             .iter()
-            .map(|item| {
-                let plain = console::strip_ansi_codes(item).to_string();
-                plain.find('/').expect("path should be present")
-            })
+            .map(|row| line_text(&picker_line(row, false, branch_width, status_width, 200)))
+            .collect();
+
+        let path_columns: Vec<usize> = lines
+            .iter()
+            .map(|line| line.find('/').expect("path should be present"))
             .collect();
         assert_eq!(
             path_columns[0], path_columns[1],
-            "paths should start at the same column"
+            "paths should start at the same column: {:?}",
+            lines
         );
+    }
+
+    #[test]
+    fn picker_lines_respect_path_budget() {
+        let worktrees = vec![worktree(
+            "/somewhere/code/salimake-worktrees/decline-machine-press-images",
+            "decline-machine-press-images",
+        )];
+        let pr_infos = vec![pr("OPEN")];
+        let rows = build_picker_rows(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"));
+
+        let (branch_width, status_width) = column_widths(&rows);
+        let path_budget = 20;
+        let line = line_text(&picker_line(&rows[0], true, branch_width, status_width, path_budget));
+
+        let expected_max = 4 + branch_width + COLUMN_GAP + status_width + COLUMN_GAP + path_budget;
+        assert!(
+            line.chars().count() <= expected_max,
+            "line too wide ({} > {}): {}",
+            line.chars().count(),
+            expected_max,
+            line
+        );
+        assert!(
+            line.contains("machine-press-images"),
+            "truncated path should keep its tail: {}",
+            line
+        );
+        assert!(line.contains('…'), "long path should be truncated: {}", line);
+        assert!(
+            line.starts_with("[x] "),
+            "selected row should show a checked box: {}",
+            line
+        );
+    }
+
+    #[test]
+    fn status_column_collapses_without_pr_info() {
+        let worktrees = vec![worktree("/repo", "main")];
+        let pr_infos = vec![None];
+        let rows = build_picker_rows(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"));
+
+        let (branch_width, status_width) = column_widths(&rows);
+        assert_eq!(status_width, 0);
+
+        let line = line_text(&picker_line(&rows[0], false, branch_width, status_width, 200));
+        assert_eq!(line, format!("[ ] main{}/repo", " ".repeat(COLUMN_GAP)));
     }
 }
