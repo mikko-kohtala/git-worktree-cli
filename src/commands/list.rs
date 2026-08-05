@@ -134,6 +134,26 @@ pub async fn run(local_only: bool) -> Result<()> {
                         }
                     }
                 }
+                "azure-devops" => {
+                    if let Some(ref client) = ctx.azure_devops_client {
+                        if let Ok(all_prs) = client.get_all_pull_requests(repo) {
+                            for (pr, branch_name) in all_prs {
+                                // Skip if we already have a local worktree for this branch
+                                if !local_branches.contains(&branch_name) {
+                                    let status = if pr.draft { "DRAFT" } else { "OPEN" };
+                                    remote_prs.push(RemotePullRequest {
+                                        branch: branch_name,
+                                        pr_info: PullRequestInfo {
+                                            url: pr.html_url,
+                                            status: status.to_string(),
+                                            title: pr.title.clone(),
+                                        },
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
                 "bitbucket-data-center" => {
                     if let Some(ref client) = ctx.bitbucket_data_center_client {
                         if let Ok(all_prs) = client.get_pull_requests(owner_or_workspace, repo).await {
@@ -189,6 +209,13 @@ pub async fn run(local_only: bool) -> Result<()> {
                 }
                 "bitbucket-data-center" => {
                     println!("\n{}", "Tip: Run 'gwt auth bitbucket-data-center setup' to enable Bitbucket Data Center pull request information".dimmed());
+                }
+                "azure-devops" => {
+                    println!(
+                        "\n{}",
+                        "Tip: Run 'gwt auth azure-devops setup' to enable Azure DevOps pull request information"
+                            .dimmed()
+                    );
                 }
                 _ => {
                     println!(

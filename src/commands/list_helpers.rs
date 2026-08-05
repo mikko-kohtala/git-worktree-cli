@@ -1,7 +1,7 @@
 use colored::{ColoredString, Colorize};
 
 use crate::{
-    bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
+    azure_devops, bitbucket_api, bitbucket_auth, bitbucket_data_center_api, bitbucket_data_center_auth, config,
     error::{Error, Result},
     github,
 };
@@ -29,6 +29,7 @@ pub struct PrContext {
     pub github_client: Option<github::GitHubClient>,
     pub bitbucket_client: Option<bitbucket_api::BitbucketClient>,
     pub bitbucket_data_center_client: Option<bitbucket_data_center_api::BitbucketDataCenterClient>,
+    pub azure_devops_client: Option<azure_devops::AzureDevOpsClient>,
     /// (platform, owner/workspace/project, repo)
     pub repo_info: Option<(String, String, String)>,
 }
@@ -39,6 +40,7 @@ impl PrContext {
         let github_client = github::GitHubClient::new();
         let mut bitbucket_client: Option<bitbucket_api::BitbucketClient> = None;
         let mut bitbucket_data_center_client: Option<bitbucket_data_center_api::BitbucketDataCenterClient> = None;
+        let mut azure_devops_client: Option<azure_devops::AzureDevOpsClient> = None;
 
         let repo_info = if let Some((_, config)) = config::GitWorktreeConfig::find_config()? {
             let repo_url = &config.repository_url;
@@ -88,6 +90,16 @@ impl PrContext {
                         }
                     }
                 }
+                "azure-devops" => {
+                    if let Some((organization, project, repo)) =
+                        azure_devops::AzureDevOpsClient::parse_azure_url(repo_url)
+                    {
+                        azure_devops_client = Some(azure_devops::AzureDevOpsClient::new(organization.clone(), project));
+                        Some(("azure-devops".to_string(), organization, repo))
+                    } else {
+                        None
+                    }
+                }
                 _ => {
                     // Try GitHub
                     let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
@@ -108,6 +120,7 @@ impl PrContext {
             github_client: Some(github_client),
             bitbucket_client,
             bitbucket_data_center_client,
+            azure_devops_client,
             repo_info,
         })
     }
@@ -119,6 +132,7 @@ impl PrContext {
                 "github" => self.github_client.as_ref().map(|c| c.has_auth()).unwrap_or(false),
                 "bitbucket-cloud" => self.bitbucket_client.is_some(),
                 "bitbucket-data-center" => self.bitbucket_data_center_client.is_some(),
+                "azure-devops" => self.azure_devops_client.as_ref().map(|c| c.has_auth()).unwrap_or(false),
                 _ => false,
             },
             None => false,
@@ -139,12 +153,14 @@ impl PrContext {
             &self.github_client,
             &self.bitbucket_client,
             &self.bitbucket_data_center_client,
+            &self.azure_devops_client,
         )
         .await
         .unwrap_or_default()
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_pr_for_branch(
     platform: &str,
     owner_or_workspace: &str,
@@ -153,6 +169,7 @@ pub async fn fetch_pr_for_branch(
     github_client: &Option<github::GitHubClient>,
     bitbucket_client: &Option<bitbucket_api::BitbucketClient>,
     bitbucket_data_center_client: &Option<bitbucket_data_center_api::BitbucketDataCenterClient>,
+    azure_devops_client: &Option<azure_devops::AzureDevOpsClient>,
 ) -> Result<Option<PullRequestInfo>> {
     match platform {
         "github" => fetch_github_pr(github_client, owner_or_workspace, repo, branch),
@@ -160,7 +177,46 @@ pub async fn fetch_pr_for_branch(
         "bitbucket-data-center" => {
             fetch_bitbucket_data_center_pr(bitbucket_data_center_client, owner_or_workspace, repo, branch).await
         }
+        "azure-devops" => fetch_azure_devops_pr(azure_devops_client, repo, branch),
         _ => Ok(None),
+    }
+}
+
+/// Map an Azure DevOps PR to the shared display status vocabulary
+fn azure_devops_display_status(pr: &azure_devops::PullRequest) -> String {
+    if pr.draft {
+        return "DRAFT".to_string();
+    }
+    match pr.status.as_str() {
+        "active" => "OPEN".to_string(),
+        "completed" => "MERGED".to_string(),
+        "abandoned" => "CLOSED".to_string(),
+        other => other.to_uppercase(),
+    }
+}
+
+fn fetch_azure_devops_pr(
+    client: &Option<azure_devops::AzureDevOpsClient>,
+    repo: &str,
+    branch: &str,
+) -> Result<Option<PullRequestInfo>> {
+    if let Some(ref client) = client {
+        match client.get_pull_requests(repo, branch) {
+            Ok(prs) => {
+                if let Some(pr) = prs.first() {
+                    Ok(Some(PullRequestInfo {
+                        url: pr.html_url.clone(),
+                        status: azure_devops_display_status(pr),
+                        title: pr.title.clone(),
+                    }))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(_) => Err(Error::provider("Failed to fetch Azure DevOps PRs")),
+        }
+    } else {
+        Ok(None)
     }
 }
 

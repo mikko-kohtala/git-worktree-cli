@@ -50,7 +50,8 @@ CONFIG:
   shell commands automatically. Variables: ${branchName}, ${worktreePath}
 
 PROVIDERS:
-  GitHub (via gh CLI), Bitbucket Cloud, Bitbucket Data Center
+  GitHub (via gh CLI), Bitbucket Cloud, Bitbucket Data Center,
+  Azure DevOps (via az CLI)
   Run 'gwt auth <provider>' to set up PR integration for 'gwt list'.",
     disable_version_flag = true
 )]
@@ -93,6 +94,19 @@ pub enum AuthAction {
         #[command(subcommand)]
         action: Option<BitbucketDataCenterAuthAction>,
     },
+    /// Authenticate with Azure DevOps
+    AzureDevops {
+        #[command(subcommand)]
+        action: Option<AzureDevopsAuthAction>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AzureDevopsAuthAction {
+    /// Show setup instructions
+    Setup,
+    /// Test the authentication connection
+    Test,
 }
 
 #[derive(Subcommand)]
@@ -119,6 +133,8 @@ pub enum Provider {
     BitbucketCloud,
     /// Bitbucket Data Center repository
     BitbucketDataCenter,
+    /// Azure DevOps repository
+    AzureDevops,
 }
 
 #[derive(Subcommand)]
@@ -128,7 +144,7 @@ pub enum Commands {
 Initialize git-worktree-cli for an existing repository.
 
 Run this once inside a git repository that has a remote origin. gwt will:
-  - Detect the provider (GitHub, Bitbucket Cloud, Bitbucket Data Center)
+  - Detect the provider (GitHub, Bitbucket Cloud, Bitbucket Data Center, Azure DevOps)
   - Detect the default branch from the remote
   - Derive the worktrees path (<repo-name>-worktrees/ as a sibling directory)
   - Save configuration globally (~/.config/git-worktree-cli/projects/)
@@ -220,6 +236,7 @@ has its own setup flow:
   github                - Uses the gh CLI. Run 'gh auth login' to set up.
   bitbucket-cloud       - Uses app passwords stored in the system keychain.
   bitbucket-data-center - Uses personal access tokens in the system keychain.
+  azure-devops          - Uses the az CLI (azure-devops extension). Run 'az login'.
 
 Use 'gwt auth <provider> setup' for setup instructions and
 'gwt auth <provider> test' to verify the connection.")]

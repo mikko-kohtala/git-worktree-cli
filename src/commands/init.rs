@@ -5,7 +5,7 @@ use crate::cli::Provider;
 use crate::config::{generate_config_filename, GitWorktreeConfig, CONFIG_FILENAME};
 use crate::error::{Error, Result};
 use crate::git;
-use crate::{bitbucket_api, github};
+use crate::{azure_devops, bitbucket_api, github};
 
 /// Initialize git-worktree-cli for an existing repository
 pub fn run(local: bool) -> Result<()> {
@@ -79,6 +79,8 @@ fn detect_provider_from_url(repo_url: &str) -> Option<Provider> {
         Some(Provider::Github)
     } else if bitbucket_api::is_bitbucket_repository(repo_url) {
         Some(Provider::BitbucketCloud)
+    } else if azure_devops::AzureDevOpsClient::parse_azure_url(repo_url).is_some() {
+        Some(Provider::AzureDevops)
     } else {
         None
     }
@@ -87,7 +89,7 @@ fn detect_provider_from_url(repo_url: &str) -> Option<Provider> {
 fn create_provider_error(repo_url: &str) -> Error {
     Error::provider(format!(
         "Could not detect repository provider from URL: {}\n\
-         Supported providers: GitHub, Bitbucket Cloud",
+         Supported providers: GitHub, Bitbucket Cloud, Azure DevOps",
         repo_url
     ))
 }

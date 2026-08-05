@@ -16,7 +16,7 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-use crate::cli::{BitbucketCloudAuthAction, BitbucketDataCenterAuthAction};
+use crate::cli::{AzureDevopsAuthAction, BitbucketCloudAuthAction, BitbucketDataCenterAuthAction};
 
 #[tokio::main]
 pub async fn run_bitbucket_cloud(action: Option<BitbucketCloudAuthAction>) -> Result<()> {
@@ -29,6 +29,34 @@ pub async fn run_bitbucket_cloud(action: Option<BitbucketCloudAuthAction>) -> Re
             let auth = BitbucketAuth::new(workspace, repo, email)?;
             let client = BitbucketClient::new(auth);
             client.test_connection().await?;
+        }
+    }
+    Ok(())
+}
+
+pub fn run_azure_devops(action: Option<AzureDevopsAuthAction>) -> Result<()> {
+    match action {
+        None | Some(AzureDevopsAuthAction::Setup) => {
+            println!("Azure DevOps PR integration uses the az CLI:");
+            println!("  1. Install the Azure CLI: https://learn.microsoft.com/cli/azure/install-azure-cli");
+            println!("  2. Add the DevOps extension: az extension add --name azure-devops");
+            println!("  3. Authenticate: az login  (or 'az devops login' with a PAT)");
+            println!("\nThen 'gwt list' will show PR status for Azure DevOps repositories.");
+            println!("Verify with: gwt auth azure-devops test");
+        }
+        Some(AzureDevopsAuthAction::Test) => {
+            let (_, config) = crate::config::GitWorktreeConfig::find_config()?
+                .ok_or_else(|| crate::error::Error::config("No gwt config found — run 'gwt init' first"))?;
+            let (organization, project, repo) =
+                crate::azure_devops::AzureDevOpsClient::parse_azure_url(&config.repository_url).ok_or_else(|| {
+                    crate::error::Error::config(format!(
+                        "Not an Azure DevOps repository URL: {}",
+                        config.repository_url
+                    ))
+                })?;
+            let client = crate::azure_devops::AzureDevOpsClient::new(organization, project);
+            client.test_connection(&repo)?;
+            println!("✓ Azure DevOps connection works ({})", config.repository_url);
         }
     }
     Ok(())
