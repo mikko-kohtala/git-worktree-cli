@@ -3,6 +3,7 @@
 //! This library provides the core functionality for the git worktree CLI tool,
 //! enabling easy creation, management, and removal of git worktrees.
 
+pub mod azure_devops;
 pub mod bitbucket_api;
 pub mod bitbucket_auth;
 pub mod bitbucket_data_center_api;

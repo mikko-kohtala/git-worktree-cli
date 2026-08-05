@@ -26,7 +26,7 @@ Single Rust binary providing git worktree management with these key modules:
 - `config.rs`: Config load/save, global/local discovery, worktrees path derivation
 - `git.rs`: Git operations with streaming output and worktree parsing
 - `hooks.rs`: Pre/post hook execution
-- `github.rs`, `bitbucket_*`: PR integrations and auth helpers
+- `github.rs`, `bitbucket_*`, `azure_devops.rs`: PR integrations and auth helpers
 - `completions.rs`: Completion content, install, and status checks
 
 ## Hooks System
@@ -53,9 +53,9 @@ All core functionality is implemented:
 - ✅ `gwt list` - Show local worktrees with PR status (`--local` skips remote PRs)
 - ✅ `gwt remove` - Safe removal with `--force`, handles orphaned worktrees, runs hooks
 - ✅ `gwt config` - Open the project config file in the default application
-- ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center setup and test helpers
+- ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center + Azure DevOps setup and test helpers
 - ✅ `gwt completions` - Status, install, and generate completions
-- ✅ Multi-provider support (GitHub, Bitbucket Cloud, Bitbucket Data Center)
+- ✅ Multi-provider support (GitHub, Bitbucket Cloud, Bitbucket Data Center, Azure DevOps)
 
 ## Testing
 

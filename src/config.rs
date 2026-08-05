@@ -48,6 +48,7 @@ impl GitWorktreeConfig {
             Provider::Github => "github".to_string(),
             Provider::BitbucketCloud => "bitbucket-cloud".to_string(),
             Provider::BitbucketDataCenter => "bitbucket-data-center".to_string(),
+            Provider::AzureDevops => "azure-devops".to_string(),
         };
 
         Self {

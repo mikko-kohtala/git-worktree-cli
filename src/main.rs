@@ -42,6 +42,9 @@ fn main() -> Result<()> {
             AuthAction::BitbucketDataCenter { action } => {
                 auth::run_bitbucket_data_center(action)?;
             }
+            AuthAction::AzureDevops { action } => {
+                auth::run_azure_devops(action)?;
+            }
         },
         Commands::Config => {
             config::run()?;
