@@ -37,7 +37,7 @@ pub struct PrContext {
 impl PrContext {
     /// Detect the provider from the project config and set up authenticated clients
     pub fn detect() -> Result<Self> {
-        let github_client = github::GitHubClient::new();
+        let mut github_client = github::GitHubClient::new();
         let mut bitbucket_client: Option<bitbucket_api::BitbucketClient> = None;
         let mut bitbucket_data_center_client: Option<bitbucket_data_center_api::BitbucketDataCenterClient> = None;
         let mut azure_devops_client: Option<azure_devops::AzureDevOpsClient> = None;
@@ -101,11 +101,9 @@ impl PrContext {
                     }
                 }
                 _ => {
-                    // Try GitHub
-                    let (owner, repo) = github::GitHubClient::parse_github_url(repo_url)
-                        .unwrap_or_else(|| ("".to_string(), "".to_string()));
-
-                    if !owner.is_empty() && !repo.is_empty() {
+                    // Try GitHub (github.com or GitHub Enterprise *.ghe.com)
+                    if let Some((host, owner, repo)) = github::GitHubClient::parse_github_url_with_host(repo_url) {
+                        github_client = github::GitHubClient::for_host(host);
                         Some(("github".to_string(), owner, repo))
                     } else {
                         None

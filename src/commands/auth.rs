@@ -6,12 +6,26 @@ use crate::error::Result;
 use crate::github::GitHubClient;
 
 pub fn run() -> Result<()> {
-    let client = GitHubClient::new();
+    // Use the configured repository's host so GitHub Enterprise (*.ghe.com) is checked too
+    let client = crate::config::GitWorktreeConfig::find_config()
+        .ok()
+        .flatten()
+        .and_then(|(_, config)| GitHubClient::parse_github_url_with_host(&config.repository_url))
+        .map(|(host, _, _)| GitHubClient::for_host(host))
+        .unwrap_or_default();
     if client.has_auth() {
-        println!("✓ You are already authenticated with GitHub via gh CLI");
+        println!(
+            "✓ You are already authenticated with GitHub ({}) via gh CLI",
+            client.host()
+        );
         println!("Run 'gh auth logout' to remove credentials if needed");
-    } else {
+    } else if client.host() == crate::constants::GITHUB_HOST {
         println!("Please authenticate with GitHub using: gh auth login");
+    } else {
+        println!(
+            "Please authenticate with GitHub using: gh auth login --hostname {}",
+            client.host()
+        );
     }
     Ok(())
 }

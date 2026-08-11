@@ -152,6 +152,35 @@ fn test_gwt_init_bitbucket_repo() {
 
 #[test]
 #[serial]
+fn test_gwt_init_github_enterprise_repo() {
+    let temp_dir = setup_test_env();
+    let temp_path = temp_dir.path();
+
+    let repo_dir = temp_path.join("my-ghe-repo");
+    fs::create_dir(&repo_dir).unwrap();
+
+    // GitHub Enterprise Cloud data-residency remotes use <tenant>@<tenant>.ghe.com
+    create_test_git_repo(&repo_dir, "acme@acme.ghe.com:acme-org/my-ghe-repo.git");
+
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(&repo_dir).arg("init").arg("--local");
+
+    let output = cmd.assert().success();
+
+    output.stdout(predicate::str::contains("Detected provider: Github"));
+
+    let config_path = temp_path.join("git-worktree-config.jsonc");
+    assert!(config_path.exists(), "Config file should be created");
+
+    let config_content = fs::read_to_string(&config_path).unwrap();
+    assert!(config_content.contains("\"repositoryUrl\": \"acme@acme.ghe.com:acme-org/my-ghe-repo.git\""));
+    assert!(config_content.contains("\"sourceControl\": \"github\""));
+
+    cleanup_test_env(temp_dir);
+}
+
+#[test]
+#[serial]
 fn test_gwt_init_unsupported_provider() {
     let temp_dir = setup_test_env();
     let temp_path = temp_dir.path();

@@ -240,13 +240,15 @@ fn extract_repo_identifier(url: &str) -> Option<String> {
         return Some(format!("bitbucket_{}", cleaned.replace('/', "_")));
     }
 
-    // Generic SSH format: git@host:path
-    if url.starts_with("git@") {
-        let rest = url.strip_prefix("git@").unwrap();
-        if let Some((host, path)) = rest.split_once(':') {
-            let host_clean = host.replace('.', "_");
-            let path_clean = path.trim_end_matches(".git").replace('/', "_");
-            return Some(format!("{}_{}", host_clean, path_clean));
+    // Generic SSH format: user@host:path (github.com uses git@,
+    // GHE data-residency remotes use <tenant>@<tenant>.ghe.com)
+    if !url.contains("://") {
+        if let Some((user_host, path)) = url.split_once(':') {
+            if let Some((_, host)) = user_host.split_once('@') {
+                let host_clean = host.replace('.', "_");
+                let path_clean = path.trim_end_matches(".git").replace('/', "_");
+                return Some(format!("{}_{}", host_clean, path_clean));
+            }
         }
     }
 
@@ -404,6 +406,10 @@ mod tests {
         assert_eq!(
             generate_config_filename("git@github.com:owner/repo.git"),
             "github_owner_repo.jsonc"
+        );
+        assert_eq!(
+            generate_config_filename("acme@acme.ghe.com:owner/repo.git"),
+            "acme_ghe_com_owner_repo.jsonc"
         );
         assert_eq!(
             generate_config_filename("https://github.com/owner/repo.git"),

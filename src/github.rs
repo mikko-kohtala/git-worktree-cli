@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::constants::GITHUB_HOST;
 use crate::error::{Error, Result};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,7 +35,9 @@ struct GhPrWithBranchResponse {
     head_ref_name: String,
 }
 
-pub struct GitHubClient;
+pub struct GitHubClient {
+    host: String,
+}
 
 impl Default for GitHubClient {
     fn default() -> Self {
@@ -44,12 +47,20 @@ impl Default for GitHubClient {
 
 impl GitHubClient {
     pub fn new() -> Self {
-        Self
+        Self::for_host(GITHUB_HOST.to_string())
     }
 
-    fn get_gh_token() -> Option<String> {
+    pub fn for_host(host: String) -> Self {
+        Self { host }
+    }
+
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    fn get_gh_token(&self) -> Option<String> {
         std::process::Command::new("gh")
-            .args(["auth", "token"])
+            .args(["auth", "token", "--hostname", &self.host])
             .output()
             .ok()
             .and_then(|output| {
@@ -65,7 +76,7 @@ impl GitHubClient {
     }
 
     pub fn has_auth(&self) -> bool {
-        Self::get_gh_token().is_some()
+        self.get_gh_token().is_some()
     }
 
     pub fn get_pull_requests(&self, owner: &str, repo: &str, branch: &str) -> Result<Vec<PullRequest>> {
@@ -75,7 +86,7 @@ impl GitHubClient {
                 "pr",
                 "list",
                 "--repo",
-                &format!("{}/{}", owner, repo),
+                &format!("{}/{}/{}", self.host, owner, repo),
                 "--head",
                 branch,
                 "--state",
@@ -123,7 +134,7 @@ impl GitHubClient {
                 "pr",
                 "list",
                 "--repo",
-                &format!("{}/{}", owner, repo),
+                &format!("{}/{}/{}", self.host, owner, repo),
                 "--state",
                 "open",
                 "--json",
@@ -167,20 +178,48 @@ impl GitHubClient {
             .collect())
     }
 
+    /// Hosts recognized as GitHub: github.com and GitHub Enterprise Cloud
+    /// data-residency tenants (<tenant>.ghe.com)
+    fn is_github_host(host: &str) -> bool {
+        host == GITHUB_HOST || host.ends_with(".ghe.com")
+    }
+
+    fn split_owner_repo(path: &str) -> Option<(String, String)> {
+        let parts: Vec<&str> = path.trim_end_matches(".git").split('/').collect();
+        if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+            Some((parts[0].to_string(), parts[1].to_string()))
+        } else {
+            None
+        }
+    }
+
     pub fn parse_github_url(url: &str) -> Option<(String, String)> {
-        // Parse both HTTPS and SSH URLs
-        if let Some(captures) = url.strip_prefix("https://github.com/") {
-            let parts: Vec<&str> = captures.trim_end_matches(".git").split('/').collect();
-            if parts.len() >= 2 {
-                return Some((parts[0].to_string(), parts[1].to_string()));
-            }
-        } else if let Some(captures) = url.strip_prefix("git@github.com:") {
-            let parts: Vec<&str> = captures.trim_end_matches(".git").split('/').collect();
-            if parts.len() >= 2 {
-                return Some((parts[0].to_string(), parts[1].to_string()));
+        Self::parse_github_url_with_host(url).map(|(_, owner, repo)| (owner, repo))
+    }
+
+    pub fn parse_github_url_with_host(url: &str) -> Option<(String, String, String)> {
+        // https://host/owner/repo(.git) and ssh://git@host/owner/repo(.git)
+        for scheme in ["https://", "http://", "ssh://"] {
+            if let Some(rest) = url.strip_prefix(scheme) {
+                let rest = rest.split_once('@').map_or(rest, |(_, r)| r);
+                let (host, path) = rest.split_once('/')?;
+                if !Self::is_github_host(host) {
+                    return None;
+                }
+                let (owner, repo) = Self::split_owner_repo(path)?;
+                return Some((host.to_string(), owner, repo));
             }
         }
-        None
+
+        // SCP-style SSH: user@host:owner/repo(.git). github.com uses git@,
+        // GHE data-residency remotes use <tenant>@<tenant>.ghe.com
+        let (user_host, path) = url.split_once(':')?;
+        let (_, host) = user_host.split_once('@')?;
+        if !Self::is_github_host(host) {
+            return None;
+        }
+        let (owner, repo) = Self::split_owner_repo(path)?;
+        Some((host.to_string(), owner, repo))
     }
 }
 
@@ -207,11 +246,49 @@ mod tests {
                 "git@github.com:owner/repo",
                 Some(("owner".to_string(), "repo".to_string())),
             ),
+            (
+                "acme@acme.ghe.com:owner/repo.git",
+                Some(("owner".to_string(), "repo".to_string())),
+            ),
+            (
+                "https://acme.ghe.com/owner/repo.git",
+                Some(("owner".to_string(), "repo".to_string())),
+            ),
             ("https://gitlab.com/owner/repo", None),
+            ("git@gitlab.com:owner/repo.git", None),
         ];
 
         for (url, expected) in test_cases {
             assert_eq!(GitHubClient::parse_github_url(url), expected);
+        }
+    }
+
+    #[test]
+    fn test_parse_github_url_with_host() {
+        let test_cases = vec![
+            (
+                "git@github.com:owner/repo.git",
+                Some(("github.com".to_string(), "owner".to_string(), "repo".to_string())),
+            ),
+            (
+                "acme@acme.ghe.com:owner/repo.git",
+                Some(("acme.ghe.com".to_string(), "owner".to_string(), "repo".to_string())),
+            ),
+            (
+                "https://acme.ghe.com/owner/repo",
+                Some(("acme.ghe.com".to_string(), "owner".to_string(), "repo".to_string())),
+            ),
+            (
+                "ssh://git@acme.ghe.com/owner/repo.git",
+                Some(("acme.ghe.com".to_string(), "owner".to_string(), "repo".to_string())),
+            ),
+            // .ghe.com must be a subdomain suffix, not part of another domain
+            ("git@evil-ghe.com:owner/repo.git", None),
+            ("https://gitlab.com/owner/repo", None),
+        ];
+
+        for (url, expected) in test_cases {
+            assert_eq!(GitHubClient::parse_github_url_with_host(url), expected);
         }
     }
 }
