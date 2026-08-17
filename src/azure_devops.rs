@@ -201,6 +201,16 @@ impl AzureDevOpsClient {
     }
 }
 
+/// Web URL of the repository's pull request list
+pub fn pr_list_web_url(organization: &str, project: &str, repo: &str) -> String {
+    format!(
+        "https://dev.azure.com/{}/{}/_git/{}/pullrequests",
+        percent_encode_segment(organization),
+        percent_encode_segment(project),
+        percent_encode_segment(repo)
+    )
+}
+
 /// Decode %XX escapes (and nothing else) in a URL path segment
 fn percent_decode(segment: &str) -> String {
     let bytes = segment.as_bytes();

@@ -226,6 +226,42 @@ NOTE: --force is required for non-interactive (AI agent) usage.")]
         force: bool,
     },
 
+    /// Print the worktrees folder path (cd helper)
+    #[command(long_about = "\
+Print the worktrees folder path (cd helper).
+
+Prints the absolute path of the worktrees folder for the current project,
+or the path of a specific worktree if a branch name is given.
+
+A program cannot change its parent shell's working directory, so the
+actual directory change is done by a small shell wrapper function that
+calls this command and runs cd on its output. The wrapper is installed
+automatically by 'gwt completions install' (bash, zsh, fish). With the
+wrapper installed, 'gwt cd' moves you to the worktrees folder and
+'gwt cd <branch>' moves you into that branch's worktree.
+
+Without the wrapper you can use: cd \"$(gwt cd)\"")]
+    Cd {
+        /// Branch name to cd into (worktrees folder root if not specified)
+        branch_name: Option<String>,
+    },
+
+    /// Open the repository's pull requests in the browser
+    #[command(long_about = "\
+Open the repository's pull requests in the browser.
+
+Opens the pull request list page of the configured provider in your
+default browser:
+
+  GitHub                 https://<host>/<owner>/<repo>/pulls
+  Bitbucket Cloud        https://bitbucket.org/<workspace>/<repo>/pull-requests
+  Bitbucket Data Center  <base-url>/projects/<project>/repos/<repo>/pull-requests
+  Azure DevOps           https://dev.azure.com/<org>/<project>/_git/<repo>/pullrequests
+
+The provider and repository are read from the project config
+(created by 'gwt init').")]
+    Prs,
+
     /// Manage authentication for external services
     #[command(long_about = "\
 Manage authentication for external services.

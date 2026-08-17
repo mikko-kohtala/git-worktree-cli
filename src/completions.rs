@@ -13,6 +13,35 @@ const FISH_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completion
 const POWERSHELL_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completions/_gwt.ps1"));
 const ELVISH_COMPLETION: &str = include_str!(concat!(env!("OUT_DIR"), "/completions/gwt.elv"));
 
+// Wrapper function so 'gwt cd' can change the shell's directory
+// (a child process cannot change its parent shell's cwd)
+const SH_CD_WRAPPER: &str = "\
+# gwt cd wrapper: lets 'gwt cd' change the shell's directory
+gwt() {
+  if [ \"$1\" = \"cd\" ]; then
+    local target
+    target=\"$(command gwt cd \"${@:2}\")\" || return
+    cd \"$target\"
+  else
+    command gwt \"$@\"
+  fi
+}
+";
+
+const FISH_CD_WRAPPER: &str = "\
+# gwt cd wrapper: lets 'gwt cd' change the shell's directory
+function gwt --wraps gwt
+    if test (count $argv) -ge 1; and test \"$argv[1]\" = cd
+        set -e argv[1]
+        set -l target (command gwt cd $argv)
+        or return
+        cd $target
+    else
+        command gwt $argv
+    end
+end
+";
+
 fn is_writable(path: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -137,14 +166,17 @@ pub fn install_completions_for_shell(shell: Shell) -> Result<()> {
     // Shell-specific setup
     match shell {
         Shell::Bash => {
+            install_cd_wrapper(shell)?;
             println!("\nTo activate completions in your current shell, run:");
             println!("  {}", "source ~/.bashrc".cyan());
             println!("\nOr start a new terminal session.");
         }
         Shell::Zsh => {
+            install_cd_wrapper(shell)?;
             setup_zsh_completions()?;
         }
         Shell::Fish => {
+            install_cd_wrapper(shell)?;
             println!("\nCompletions will be available immediately in new fish sessions.");
         }
         Shell::PowerShell => {
@@ -156,6 +188,57 @@ pub fn install_completions_for_shell(shell: Shell) -> Result<()> {
         Shell::Elvish => {
             println!("\nTo activate completions, add the following to your ~/.elvish/rc.elv:");
             println!("  {}", "use gwt-completions".cyan());
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// Install the shell function that makes 'gwt cd' change the shell's directory
+fn install_cd_wrapper(shell: Shell) -> Result<()> {
+    let home = env::var("HOME").map_err(|_| Error::msg("Could not determine home directory"))?;
+
+    match shell {
+        Shell::Bash | Shell::Zsh => {
+            let rc_name = if matches!(shell, Shell::Bash) {
+                ".bashrc"
+            } else {
+                ".zshrc"
+            };
+            let rc_path = PathBuf::from(&home).join(rc_name);
+
+            let mut content = if rc_path.exists() {
+                fs::read_to_string(&rc_path)?
+            } else {
+                String::new()
+            };
+
+            if content.contains("# gwt cd wrapper") {
+                println!("✓ gwt cd wrapper already configured in ~/{}", rc_name);
+                return Ok(());
+            }
+
+            if !content.is_empty() && !content.ends_with('\n') {
+                content.push('\n');
+            }
+            content.push('\n');
+            content.push_str(SH_CD_WRAPPER);
+            fs::write(&rc_path, content)?;
+
+            println!("✓ Added gwt cd wrapper to ~/{}", rc_name);
+        }
+        Shell::Fish => {
+            let func_path = PathBuf::from(&home).join(".config/fish/functions/gwt.fish");
+            if let Some(parent) = func_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&func_path, FISH_CD_WRAPPER)?;
+
+            println!(
+                "✓ Installed gwt cd wrapper to: {}",
+                func_path.display().to_string().cyan()
+            );
         }
         _ => {}
     }

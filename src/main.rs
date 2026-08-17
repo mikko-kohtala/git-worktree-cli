@@ -3,7 +3,7 @@ use colored::Colorize;
 
 use git_worktree_cli::{
     cli::{AuthAction, Cli, Commands, CompletionAction},
-    commands::{add, auth, config, init, list, remove},
+    commands::{add, auth, cd, config, init, list, prs, remove},
     completions,
     error::Result,
 };
@@ -31,6 +31,12 @@ fn main() -> Result<()> {
         }
         Commands::Remove { branch_name, force } => {
             remove::run(branch_name.as_deref(), force)?;
+        }
+        Commands::Cd { branch_name } => {
+            cd::run(branch_name.as_deref())?;
+        }
+        Commands::Prs => {
+            prs::run()?;
         }
         Commands::Auth { action } => match action {
             AuthAction::Github => {

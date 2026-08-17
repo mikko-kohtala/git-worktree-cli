@@ -21,7 +21,7 @@ After committing, tag the version: `git tag v<version>` (e.g., `git tag v0.9.0`)
 ## Architecture
 
 Single Rust binary providing git worktree management with these key modules:
-- `commands/`: CLI actions (init, add, list, remove, config, auth, completions)
+- `commands/`: CLI actions (init, add, list, remove, cd, prs, config, auth, completions)
 - `core/`: Project discovery and worktree layout helpers
 - `config.rs`: Config load/save, global/local discovery, worktrees path derivation
 - `git.rs`: Git operations with streaming output and worktree parsing
@@ -52,6 +52,8 @@ All core functionality is implemented:
 - ✅ `gwt add` - Create worktrees under the derived `-worktrees` path and run hooks
 - ✅ `gwt list` - Show local worktrees with PR status (`--local` skips remote PRs)
 - ✅ `gwt remove` - Safe removal with `--force`, handles orphaned worktrees, runs hooks
+- ✅ `gwt cd` - Print worktrees folder (or specific worktree) path; shell wrapper installed by `gwt completions install` makes it change directory
+- ✅ `gwt prs` - Open the provider's pull request list page in the browser
 - ✅ `gwt config` - Open the project config file in the default application
 - ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center + Azure DevOps setup and test helpers
 - ✅ `gwt completions` - Status, install, and generate completions
