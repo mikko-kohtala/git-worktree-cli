@@ -63,7 +63,7 @@ gwt remove hotfix/login-bug
 - `gwt init [--local]` - Detect the current repo and write config (global by default)
 - `gwt add <branch>` - Create a worktree under `<repo>-worktrees`
 - `gwt list [--local]` - Show worktrees with PR status (`--local` skips remote PRs)
-- `gwt remove [branch] [--force]` - Delete a worktree (current by default)
+- `gwt remove [branch] [--force]` - Delete a worktree (interactive picker without a branch; confirms one by one, `a` removes all remaining without further questions)
 - `gwt auth github` - Check GitHub auth (uses `gh`)
 - `gwt auth bitbucket-cloud [setup|test]` - Configure or test Bitbucket Cloud auth
 - `gwt auth bitbucket-data-center [setup|test]` - Configure or test Bitbucket Data Center auth

@@ -106,24 +106,11 @@ fn run_interactive(git_dir: &std::path::Path, worktrees: Vec<git::Worktree>, for
         }
     }
 
-    if !force {
-        print!(
-            "\n{}",
-            "Are you sure you want to remove the selected worktrees? (y/N): ".cyan()
-        );
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let confirmation = input.trim().to_lowercase();
-
-        if confirmation != "y" && confirmation != "yes" {
-            println!("{}", "Removal cancelled.".yellow());
-            return Ok(());
-        }
-    }
-
     let selected_paths: Vec<std::path::PathBuf> = indices.iter().map(|&i| removable[i].path.clone()).collect();
+
+    // With --force skip all questions; otherwise confirm one by one,
+    // where answering 'a' removes everything remaining without further questions
+    let mut remove_all = force;
 
     for path in selected_paths {
         // Refresh the worktree list each round so removed entries are not reused
@@ -131,10 +118,55 @@ fn run_interactive(git_dir: &std::path::Path, worktrees: Vec<git::Worktree>, for
         let Some(target_worktree) = worktrees.iter().find(|wt| wt.path == path) else {
             continue;
         };
-        remove_worktree(&worktrees, target_worktree, force, true)?;
+
+        if !remove_all {
+            match confirm_removal(get_branch_display(target_worktree))? {
+                Confirmation::Yes => {}
+                Confirmation::All => remove_all = true,
+                Confirmation::No => {
+                    println!(
+                        "{}",
+                        format!("Skipped: {}", get_branch_display(target_worktree)).yellow()
+                    );
+                    continue;
+                }
+                Confirmation::Quit => {
+                    println!("{}", "Removal cancelled.".yellow());
+                    return Ok(());
+                }
+            }
+        }
+
+        remove_worktree(&worktrees, target_worktree, remove_all, true)?;
     }
 
     Ok(())
+}
+
+enum Confirmation {
+    Yes,
+    No,
+    All,
+    Quit,
+}
+
+/// Ask whether to remove one worktree. 'a' answers yes for this and all
+/// remaining worktrees (no further questions, unmerged branches force-deleted).
+fn confirm_removal(branch: &str) -> Result<Confirmation> {
+    print!(
+        "\n{}",
+        format!("Remove '{}'? (y = yes / N = skip / a = all / q = quit): ", branch).cyan()
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(match input.trim().to_lowercase().as_str() {
+        "y" | "yes" => Confirmation::Yes,
+        "a" | "all" => Confirmation::All,
+        "q" | "quit" => Confirmation::Quit,
+        _ => Confirmation::No,
+    })
 }
 
 const CURRENT_LABEL: &str = " (current)";
