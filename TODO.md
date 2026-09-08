@@ -27,7 +27,7 @@ This file tracks pending tasks and future enhancements for the project.
 ## 🔧 Medium Priority  
 
 ### Core Features
-- [ ] **`gwt switch`** - Quick navigation between worktrees
+- [x] **`gwt cd`** - Quick navigation between worktrees (✅ **Already implemented**)
 - [ ] **`gwt doctor`** - Health check command to diagnose issues
 - [ ] **Cleanup command** - Remove stale worktrees in bulk
 - [ ] **Clone existing worktrees** - Support cloning projects with existing worktrees
@@ -45,7 +45,7 @@ This file tracks pending tasks and future enhancements for the project.
   - [ ] `gwt init --provider <provider>` - (✅ **Already implemented**)
   - [ ] `gwt add --from <branch>` - Create from specific branch instead of main
   - [ ] `gwt add --no-hooks` - Skip hook execution
-  - [ ] `gwt remove --force` - Skip confirmation prompts
+  - [x] `gwt remove --force` - Skip confirmation prompts (✅ **Already implemented**)
   - [ ] `gwt remove --keep-branch` - Preserve branch even for feature branches
 - [ ] **Debug logging** - Add `--debug` parameter for troubleshooting:
   - [ ] API request/response logging for Bitbucket Data Center
@@ -84,7 +84,6 @@ This file tracks pending tasks and future enhancements for the project.
 - [ ] Build warnings from completion generation (cosmetic)
 - [ ] Provider detection could be more robust for edge cases
 - [ ] Error messages for auth failures could be more helpful
-- [ ] No support for custom GitHub Enterprise instances yet
 
 ## 💡 Ideas for Future Consideration
 

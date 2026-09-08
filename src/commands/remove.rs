@@ -794,10 +794,10 @@ mod tests {
     #[test]
     fn picker_rows_capture_current_and_status() {
         let worktrees = vec![
-            worktree("/somewhere/code/salimake", "main"),
+            worktree("/somewhere/code/my-app", "main"),
             worktree(
-                "/somewhere/code/salimake-worktrees/decline-machine-press-images",
-                "decline-machine-press-images",
+                "/somewhere/code/my-app-worktrees/feature-image-export",
+                "feature-image-export",
             ),
         ];
         let pr_infos = vec![None, pr("OPEN")];
@@ -808,11 +808,8 @@ mod tests {
         assert!(!rows[1].current);
         assert_eq!(rows[0].status, None);
         assert_eq!(rows[1].status, Some("OPEN".to_string()));
-        assert_eq!(rows[1].branch, "decline-machine-press-images");
-        assert_eq!(
-            rows[1].path,
-            "/somewhere/code/salimake-worktrees/decline-machine-press-images"
-        );
+        assert_eq!(rows[1].branch, "feature-image-export");
+        assert_eq!(rows[1].path, "/somewhere/code/my-app-worktrees/feature-image-export");
     }
 
     #[test]
@@ -844,8 +841,8 @@ mod tests {
     #[test]
     fn picker_lines_respect_path_budget() {
         let worktrees = vec![worktree(
-            "/somewhere/code/salimake-worktrees/decline-machine-press-images",
-            "decline-machine-press-images",
+            "/somewhere/code/my-app-worktrees/feature-image-export",
+            "feature-image-export",
         )];
         let pr_infos = vec![pr("OPEN")];
         let rows = build_picker_rows(&worktrees, &pr_infos, std::path::Path::new("/elsewhere"));
@@ -863,7 +860,7 @@ mod tests {
             line
         );
         assert!(
-            line.contains("machine-press-images"),
+            line.contains("image-export"),
             "truncated path should keep its tail: {}",
             line
         );
