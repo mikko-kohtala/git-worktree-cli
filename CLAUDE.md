@@ -1,69 +1,14 @@
 # Development Guide
 
-## Commands
+`gwt`: a Rust CLI for managing git worktrees, with PR integrations for GitHub, Bitbucket and Azure DevOps. Usage and hooks: README.md.
 
-### Development
-- **Build release binary**: `cargo build --release`
-- **Build debug binary**: `cargo build`
-- **Run tests**: `cargo test`
-- **Lint code**: `cargo clippy -- -D warnings`
-- **Format code**: `cargo fmt`
-
-### Validation
+## Validation
 Validate all work with `make check` (fmt, clippy, tests) before calling it done. `make format` applies formatting.
 
-### Version Management
+## Version Management
 When making code changes, increment the version in Cargo.toml:
 - Patch version (x.x.N) for bug fixes
 - Minor version (x.N.x) for new features
 - Major version (N.x.x) for breaking changes
 
-After committing, tag the version: `git tag v<version>` (e.g., `git tag v0.9.0`)
-
-## Architecture
-
-Single Rust binary providing git worktree management with these key modules:
-- `commands/`: CLI actions (init, add, list, remove, cd, prs, config, auth, completions)
-- `core/`: Project discovery and worktree layout helpers
-- `config.rs`: Config load/save, global/local discovery, worktrees path derivation
-- `git.rs`: Git operations with streaming output and worktree parsing
-- `hooks.rs`: Pre/post hook execution
-- `github.rs`, `bitbucket_*`, `azure_devops.rs`: PR integrations and auth helpers
-- `completions.rs`: Completion content, install, and status checks
-
-## Hooks System
-
-Hooks allow custom commands around worktree operations. Define in `git-worktree-config.jsonc`:
-
-```jsonc
-{
-  "hooks": {
-    "postAdd": ["npm install", "npm run init"],
-    "preRemove": ["echo Cleaning up ${branchName}"],
-    "postRemove": ["echo Removed ${worktreePath}"]
-  }
-}
-```
-
-Variables: `${branchName}`, `${worktreePath}`
-
-## Features
-
-All core functionality is implemented:
-- ✅ `gwt init` - Detect provider from origin and write config (global or `--local`)
-- ✅ `gwt add` - Create worktrees under the derived `-worktrees` path and run hooks
-- ✅ `gwt list` - Show local worktrees with PR status (`--local` skips remote PRs)
-- ✅ `gwt remove` - Safe removal with `--force`, handles orphaned worktrees, runs hooks
-- ✅ `gwt cd` - Print worktrees folder (or specific worktree) path; shell wrapper installed by `gwt completions install` makes it change directory
-- ✅ `gwt prs` - Open the provider's pull request list page in the browser
-- ✅ `gwt config` - Open the project config file in the default application
-- ✅ `gwt auth` - GitHub + Bitbucket Cloud/Data Center + Azure DevOps setup and test helpers
-- ✅ `gwt completions` - Status, install, and generate completions
-- ✅ Multi-provider support (GitHub, Bitbucket Cloud, Bitbucket Data Center, Azure DevOps)
-
-## Testing
-
-Targeted test coverage:
-- Integration tests for init flows and config path derivation using `assert_cmd`
-- Unit tests in `src/config.rs` and Bitbucket auth helpers
-- Integration tests create real git repos in temp directories
+After the PR is squash-merged, tag the resulting commit on main, not a branch commit: `git fetch origin && git tag v<version> origin/main` (e.g., `v0.9.0`)

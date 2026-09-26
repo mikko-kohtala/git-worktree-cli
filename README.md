@@ -64,9 +64,13 @@ gwt remove hotfix/login-bug
 - `gwt add <branch>` - Create a worktree under `<repo>-worktrees`
 - `gwt list [--local]` - Show worktrees with PR status (`--local` skips remote PRs)
 - `gwt remove [branch] [--force]` - Delete a worktree (interactive picker without a branch; confirms one by one, `a` removes all remaining without further questions)
+- `gwt cd [branch]` - Print the worktrees folder (or a worktree) path; the shell wrapper installed by `gwt completions install` (bash, zsh, fish) makes it change directory
+- `gwt prs` - Open the provider's pull request list in the browser
+- `gwt config` - Open the project config file in the default application
 - `gwt auth github` - Check GitHub auth (uses `gh`)
 - `gwt auth bitbucket-cloud [setup|test]` - Configure or test Bitbucket Cloud auth
 - `gwt auth bitbucket-data-center [setup|test]` - Configure or test Bitbucket Data Center auth
+- `gwt auth azure-devops [setup|test]` - Configure or test Azure DevOps auth (uses the `az` CLI with the azure-devops extension)
 - `gwt completions` - Check completion installation status
 - `gwt completions install [shell]` - Install completions (auto-detects shell)
 - `gwt completions generate <shell>` - Output completion script to stdout
@@ -108,8 +112,9 @@ Setup once to see PR status in `gwt list`:
 **GitHub**: `gh auth login` (or `gwt auth github`)
 **Bitbucket Cloud**: `gwt auth bitbucket-cloud setup`
 **Bitbucket Data Center**: `gwt auth bitbucket-data-center setup`
+**Azure DevOps**: `gwt auth azure-devops setup`
 
-Works with GitHub, Bitbucket Cloud, and Bitbucket Data Center.
+Works with GitHub, Bitbucket Cloud, Bitbucket Data Center, and Azure DevOps.
 
 ## Why This Makes Work Easier
 
