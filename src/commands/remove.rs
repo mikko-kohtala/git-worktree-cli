@@ -150,10 +150,15 @@ fn run_interactive(
             }
         }
 
-        if let Err(e) = remove_worktree(&worktrees, target_worktree, remove_all, true, ignore_hook_errors) {
-            let branch = get_branch_display(target_worktree).to_string();
-            eprintln!("{} {}: {}", "✗".red(), branch, e);
-            failed.push(branch);
+        match remove_worktree(&worktrees, target_worktree, remove_all, true, ignore_hook_errors) {
+            Ok(()) => {}
+            // A failed hook affects only this worktree: report it and go on
+            Err(e @ Error::Hook(_)) => {
+                let branch = get_branch_display(target_worktree).to_string();
+                eprintln!("{} {}: {}", "✗".red(), branch, e);
+                failed.push(branch);
+            }
+            Err(e) => return Err(e),
         }
     }
 
@@ -161,7 +166,7 @@ fn run_interactive(
         Ok(())
     } else {
         Err(Error::msg(format!(
-            "Failed to fully remove {} worktree(s): {}",
+            "Hooks failed for {} worktree(s): {}",
             failed.len(),
             failed.join(", ")
         )))
@@ -509,8 +514,14 @@ fn remove_worktree(
     } else {
         project_root.as_path()
     };
+    // The name that finds this worktree again: its branch, or for a detached
+    // HEAD its directory name
+    let retry_name = match (&target_worktree.branch, target_worktree.path.file_name()) {
+        (None, Some(dir)) => dir.to_string_lossy().to_string(),
+        _ => branch_display.to_string(),
+    };
     hooks::execute_hooks("preRemove", pre_remove_dir, &variables, ignore_hook_errors)
-        .map_err(|e| pre_remove_failed(e, branch_display, "Kept the worktree and branch."))?;
+        .map_err(|e| pre_remove_failed(e, &retry_name, force, "Kept the worktree and branch."))?;
 
     // Find another worktree to run git commands from
     let main_branches = constants::PROTECTED_BRANCHES;
@@ -575,21 +586,30 @@ fn remove_worktree(
     post_remove.map_err(|e| post_remove_failed(e, branch_display))
 }
 
-/// The error for a failed preRemove hook: nothing was removed. `kept` says
-/// what was left in place.
-fn pre_remove_failed(err: Error, branch: &str, kept: &str) -> Error {
+/// Explain a failed preRemove hook: nothing was removed. `kept` says what was
+/// left in place, `retry_name` is what to pass to `gwt remove` again. Other
+/// errors (e.g. an unreadable config) pass through unchanged.
+fn pre_remove_failed(err: Error, retry_name: &str, force: bool, kept: &str) -> Error {
+    if !matches!(err, Error::Hook(_)) {
+        return err;
+    }
+    let retry = format!("gwt remove {}{}", if force { "-f " } else { "" }, retry_name);
     Error::hook(format!(
-        "{}\n{} Fix the problem and re-run `gwt remove {}`, or add {} to remove it anyway \
+        "{}\n{} Fix the problem and re-run `{}`, or add {} to remove it anyway \
          (the failed cleanup is then skipped).",
         err,
         kept,
-        branch,
+        retry,
         hooks::IGNORE_HOOK_ERRORS_FLAG
     ))
 }
 
-/// The error for a failed postRemove hook: the removal itself is done
+/// Explain a failed postRemove hook: the removal itself is done. Other errors
+/// pass through unchanged.
 fn post_remove_failed(err: Error, branch: &str) -> Error {
+    if !matches!(err, Error::Hook(_)) {
+        return err;
+    }
     Error::hook(format!(
         "{}\nThe worktree for '{}' was removed, but its postRemove cleanup did not finish. \
          Fix the problem and run the failed command again by hand.",
@@ -740,7 +760,7 @@ fn remove_already_removed_worktree(
         "Nothing else was cleaned up."
     };
     hooks::execute_hooks("preRemove", &project_root, &variables, ignore_hook_errors)
-        .map_err(|e| pre_remove_failed(e, branch, kept))?;
+        .map_err(|e| pre_remove_failed(e, branch, force, kept))?;
 
     // Drop any stale registration first; git refuses to delete a branch
     // that is still checked out in a registered worktree
@@ -752,25 +772,28 @@ fn remove_already_removed_worktree(
 
     let branch_left = branch_exists && !delete_branch(branch, git_dir, force)?;
 
-    hooks::execute_hooks("postRemove", &project_root, &variables, ignore_hook_errors)
-        .map_err(|e| post_remove_failed(e, branch))?;
+    let post_remove = hooks::execute_hooks("postRemove", &project_root, &variables, ignore_hook_errors);
 
-    let hooks_summary = if has_hooks {
-        "ran the remove hooks"
-    } else {
-        "no remove hooks configured"
+    let hooks_summary = match (&post_remove, has_hooks) {
+        (Err(_), _) => "postRemove failed",
+        (Ok(()), true) => "ran the remove hooks",
+        (Ok(()), false) => "no remove hooks configured",
     };
     let branch_summary = if branch_left { "branch kept" } else { "branch deleted" };
-    println!(
-        "{}",
-        format!(
-            "✓ Worktree for '{}' was already removed; {}, {}",
-            branch, hooks_summary, branch_summary
-        )
-        .green()
+    let summary = format!(
+        "Worktree for '{}' was already removed; {}, {}",
+        branch, hooks_summary, branch_summary
     );
-
-    Ok(())
+    match post_remove {
+        Ok(()) => {
+            println!("{}", format!("✓ {}", summary).green());
+            Ok(())
+        }
+        Err(e) => {
+            println!("{}", format!("⚠️  {}", summary).yellow());
+            Err(post_remove_failed(e, branch))
+        }
+    }
 }
 
 fn find_worktree_by_branch<'a>(worktrees: &'a [git::Worktree], target_branch: &str) -> Option<&'a git::Worktree> {
@@ -865,8 +888,14 @@ fn remove_orphaned_worktree(
 
     // Execute pre-remove hooks from the worktree directory, which still exists.
     // A failure keeps the directory and branch.
-    hooks::execute_hooks("preRemove", worktree_path, &variables, ignore_hook_errors)
-        .map_err(|e| pre_remove_failed(e, branch_name, "Kept the orphaned worktree directory and branch."))?;
+    hooks::execute_hooks("preRemove", worktree_path, &variables, ignore_hook_errors).map_err(|e| {
+        pre_remove_failed(
+            e,
+            branch_name,
+            force,
+            "Kept the orphaned worktree directory and branch.",
+        )
+    })?;
 
     // If we're currently in the worktree being removed, change directory first
     if will_remove_current {

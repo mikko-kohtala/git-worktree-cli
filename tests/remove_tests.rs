@@ -307,6 +307,7 @@ fn remove_keeps_worktree_and_branch_when_pre_remove_fails() {
         .stderr(predicate::str::contains("preRemove-broke"))
         .stderr(predicate::str::contains("preRemove hook failed (exit code 1)"))
         .stderr(predicate::str::contains("Kept the worktree and branch."))
+        .stderr(predicate::str::contains("re-run `gwt remove -f feature-x`"))
         .stderr(predicate::str::contains("--ignore-hook-errors"));
 
     assert!(path.exists(), "worktree should be kept");
@@ -382,6 +383,9 @@ fn remove_already_removed_exits_non_zero_when_post_remove_fails() {
     project
         .gwt_remove("feature-x")
         .failure()
+        .stdout(predicate::str::contains(
+            "already removed; postRemove failed, branch deleted",
+        ))
         .stderr(predicate::str::contains("postRemove hook failed (exit code 1)"));
 
     assert!(!project.branch_exists("feature-x"), "branch should still be deleted");
