@@ -6,9 +6,11 @@
 - **Build release binary**: `cargo build --release`
 - **Build debug binary**: `cargo build`
 - **Run tests**: `cargo test`
-- **Type checking**: `cargo check`
 - **Lint code**: `cargo clippy -- -D warnings`
 - **Format code**: `cargo fmt`
+
+### Validation
+Validate all work with `make check` (fmt, clippy, tests) before calling it done. `make format` applies formatting.
 
 ### Version Management
 When making code changes, increment the version in Cargo.toml:
