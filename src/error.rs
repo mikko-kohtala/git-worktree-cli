@@ -37,7 +37,7 @@ pub enum Error {
     Branch(String),
 
     /// Hook execution errors
-    #[error("Hook execution failed: {0}")]
+    #[error("{0}")]
     Hook(String),
 
     /// Authentication errors

@@ -8,7 +8,14 @@ use git_worktree_cli::{
     error::Result,
 };
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("{} {}", "Error:".red().bold(), e);
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<()> {
     let cli = Cli::parse();
 
     let command = match cli.command {
@@ -23,14 +30,21 @@ fn main() -> Result<()> {
         Commands::Init { local } => {
             init::run(local)?;
         }
-        Commands::Add { branch_name } => {
-            add::run(&branch_name)?;
+        Commands::Add {
+            branch_name,
+            ignore_hook_errors,
+        } => {
+            add::run(&branch_name, ignore_hook_errors)?;
         }
         Commands::List { local } => {
             list::run(local)?;
         }
-        Commands::Remove { branch_name, force } => {
-            remove::run(branch_name.as_deref(), force)?;
+        Commands::Remove {
+            branch_name,
+            force,
+            ignore_hook_errors,
+        } => {
+            remove::run(branch_name.as_deref(), force, ignore_hook_errors)?;
         }
         Commands::Cd { branch_name } => {
             cd::run(branch_name.as_deref())?;

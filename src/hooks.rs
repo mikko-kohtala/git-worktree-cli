@@ -5,6 +5,9 @@ use std::process::{Command, Stdio};
 use crate::config::GitWorktreeConfig;
 use crate::error::{Error, Result};
 
+/// The flag that turns hook failures back into warnings
+pub const IGNORE_HOOK_ERRORS_FLAG: &str = "--ignore-hook-errors";
+
 /// Commands configured for a hook type, if any
 fn configured_hooks(hook_type: &str) -> Result<Vec<String>> {
     let Some((_, config)) = GitWorktreeConfig::find_config()? else {
@@ -23,7 +26,18 @@ fn configured_hooks(hook_type: &str) -> Result<Vec<String>> {
     Ok(commands.unwrap_or_default())
 }
 
-pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&str, &str)]) -> Result<()> {
+/// Run the configured commands for `hook_type` in order, streaming their output.
+///
+/// A command that exits non-zero (or cannot be started) stops the run and
+/// returns `Error::Hook` naming the hook type and the command, so the caller
+/// can fail closed. With `ignore_errors` the failure is only a warning and the
+/// remaining commands still run.
+pub fn execute_hooks(
+    hook_type: &str,
+    working_directory: &Path,
+    variables: &[(&str, &str)],
+    ignore_errors: bool,
+) -> Result<()> {
     let hook_commands = configured_hooks(hook_type)?;
     if hook_commands.is_empty() {
         return Ok(());
@@ -41,14 +55,26 @@ pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&s
 
         println!("   {}", format!("Executing: {}", command).blue());
 
-        // Execute with streaming output - this is the key improvement!
         match execute_command_streaming(&command, working_directory) {
             Ok(()) => {
                 println!("   {}", "✓ Hook completed successfully".green());
             }
-            Err(e) => {
-                println!("   {}", format!("⚠️  Hook failed: {}", e).yellow());
-                // Continue with other hooks even if one fails
+            Err(reason) if ignore_errors => {
+                println!(
+                    "   {}",
+                    format!(
+                        "⚠️  Hook failed ({}), continuing because of {}",
+                        reason, IGNORE_HOOK_ERRORS_FLAG
+                    )
+                    .yellow()
+                );
+            }
+            Err(reason) => {
+                println!("   {}", format!("✗ Hook failed: {}", reason).red());
+                return Err(Error::hook(format!(
+                    "{} hook failed ({}): {}",
+                    hook_type, reason, command
+                )));
             }
         }
     }
@@ -56,25 +82,24 @@ pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&s
     Ok(())
 }
 
-fn execute_command_streaming(command: &str, working_directory: &Path) -> Result<()> {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c")
+/// Run one hook command with inherited stdout/stderr. On failure returns a
+/// short reason such as "exit code 1".
+fn execute_command_streaming(command: &str, working_directory: &Path) -> std::result::Result<(), String> {
+    let status = Command::new("sh")
+        .arg("-c")
         .arg(command)
         .current_dir(working_directory)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .env("FORCE_COLOR", "1");
-
-    let status = cmd
+        .env("FORCE_COLOR", "1")
         .status()
-        .map_err(|e| Error::hook(format!("Failed to execute hook command: {}", e)))?;
+        .map_err(|e| format!("could not start: {}", e))?;
 
-    if !status.success() {
-        return Err(Error::hook(format!(
-            "Command failed with exit code: {:?}",
-            status.code()
-        )));
+    if status.success() {
+        return Ok(());
     }
-
-    Ok(())
+    Err(match status.code() {
+        Some(code) => format!("exit code {}", code),
+        None => "killed by a signal".to_string(),
+    })
 }
