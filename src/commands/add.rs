@@ -8,7 +8,7 @@ use crate::error::{Error, Result};
 use crate::git;
 use crate::hooks;
 
-pub fn run(branch_name: &str) -> Result<()> {
+pub fn run(branch_name: &str, ignore_hook_errors: bool) -> Result<()> {
     if branch_name.is_empty() {
         return Err(Error::msg(
             "Error: Branch name is required\nUsage: gwt add <branch-name>",
@@ -109,7 +109,8 @@ pub fn run(branch_name: &str) -> Result<()> {
     );
     println!("{}", format!("✓ Branch: {}", branch_name).green());
 
-    // Execute post-add hooks
+    // Execute post-add hooks. On failure keep the worktree: it is useful for
+    // retrying the provisioning, and `gwt remove` cleans it up otherwise.
     hooks::execute_hooks(
         "postAdd",
         &target_path,
@@ -117,7 +118,17 @@ pub fn run(branch_name: &str) -> Result<()> {
             ("branchName", branch_name),
             ("worktreePath", target_path.to_str().unwrap()),
         ],
-    )?;
+        ignore_hook_errors,
+    )
+    .map_err(|e| {
+        Error::hook(format!(
+            "{}\nKept the worktree at {}. Fix the problem and re-run the failed command in it, \
+             or remove it with `gwt remove -f {}`.",
+            e,
+            target_path.display(),
+            branch_name
+        ))
+    })?;
 
     Ok(())
 }

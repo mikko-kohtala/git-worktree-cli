@@ -61,9 +61,9 @@ gwt remove hotfix/login-bug
 ## Commands
 
 - `gwt init [--local]` - Detect the current repo and write config (global by default)
-- `gwt add <branch>` - Create a worktree under `<repo>-worktrees`
+- `gwt add <branch> [--ignore-hook-errors]` - Create a worktree under `<repo>-worktrees`
 - `gwt list [--local]` - Show worktrees with PR status (`--local` skips remote PRs)
-- `gwt remove [branch] [--force]` - Delete a worktree (interactive picker without a branch; confirms one by one, `a` removes all remaining without further questions)
+- `gwt remove [branch] [--force] [--ignore-hook-errors]` - Delete a worktree (interactive picker without a branch; confirms one by one, `a` removes all remaining without further questions)
 - `gwt cd [branch]` - Print the worktrees folder (or a worktree) path; the shell wrapper installed by `gwt completions install` (bash, zsh, fish) makes it change directory
 - `gwt prs` - Open the provider's pull request list in the browser
 - `gwt config` - Open the project config file in the default application
@@ -106,6 +106,18 @@ Variables: `${branchName}`, `${worktreePath}`.
 Now `gwt add feature/x` and `gwt remove feature/x` run hooks automatically.
 
 If the worktree was already removed without gwt (plain `git worktree remove`, or `gh pr merge --delete-branch`), `gwt remove -f feature/x` still runs `preRemove` and `postRemove` from the project root, with `${worktreePath}` set to where `gwt add` would have put the worktree. It also deletes the local branch if it is still there and prunes stale worktree references. It fails with "Worktree for 'feature/x' not found" (non-zero exit) only when the project has no remove hooks and no such local branch. With hooks configured, a mistyped name runs the hooks for that name, so check the name before passing `-f`. Invalid branch names and protected branches (main, master, dev, develop and the configured `mainBranch`) are never cleaned up this way. An orphaned worktree (its `.git` file points to a missing git directory) also runs the remove hooks and has its branch deleted.
+
+### When a hook fails
+
+Hooks fail closed: a hook command that exits non-zero stops the remaining hooks of that type and makes gwt exit non-zero, with the hook's own output shown above the error.
+
+| Hook | On failure |
+| --- | --- |
+| `preRemove` | Nothing is removed: the worktree and branch stay (also when the worktree was already removed; the branch is not deleted). Fix the problem and re-run `gwt remove`. |
+| `postRemove` | The worktree is already gone, so gwt finishes (branch delete, prune), then exits non-zero. |
+| `postAdd` | The new worktree is kept for retrying. Re-run the failed provisioning command in it, or `gwt remove -f <branch>` it. |
+
+`--ignore-hook-errors` (on `gwt add` and `gwt remove`) turns hook failures back into warnings: the remaining hooks still run, the removal goes ahead and gwt exits 0, as before 0.18.0. Use it when a `preRemove` cleanup cannot succeed and you accept leaking whatever it would have cleaned up.
 
 ## PR Integration
 

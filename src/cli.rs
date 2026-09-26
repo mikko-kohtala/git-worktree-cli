@@ -48,6 +48,9 @@ CONFIG:
 
   Config supports hooks (postAdd, preRemove, postRemove) that run
   shell commands automatically. Variables: ${branchName}, ${worktreePath}
+  A failing hook makes the command exit non-zero; a failing preRemove
+  keeps the worktree and branch. --ignore-hook-errors (add, remove)
+  turns hook failures into warnings.
 
 PROVIDERS:
   GitHub (via gh CLI), Bitbucket Cloud, Bitbucket Data Center,
@@ -152,7 +155,8 @@ Run this once inside a git repository that has a remote origin. gwt will:
 Use --local to save config as git-worktree-config.jsonc next to the repo instead.
 
 The config file can be edited to add hooks (postAdd, preRemove, postRemove)
-that run automatically when creating or removing worktrees.")]
+that run automatically when creating or removing worktrees. A failing hook
+makes 'gwt add' or 'gwt remove' exit non-zero.")]
     Init {
         /// Write config to project directory instead of global location
         #[arg(long)]
@@ -169,13 +173,20 @@ creates a new branch from origin/<main-branch>.
 
 The command fetches from origin first to ensure the latest remote state.
 After creating the worktree, any postAdd hooks from the config are executed
-in the new worktree directory.
+in the new worktree directory. If a postAdd hook fails, the remaining hooks
+are skipped, the worktree is kept (so you can retry the provisioning) and gwt
+exits non-zero. Re-run the failed command in the worktree, or remove it with
+'gwt remove -f <branch>'. --ignore-hook-errors turns hook failures into
+warnings and exits 0.
 
 Branch names can include slashes (e.g., feature/user-auth, bugfix/fix-123).
 The directory structure mirrors the branch name.")]
     Add {
         /// Branch name (can include slashes like feature/branch-name)
         branch_name: String,
+        /// Warn about failing postAdd hooks instead of exiting non-zero
+        #[arg(long)]
+        ignore_hook_errors: bool,
     },
 
     /// List all worktrees in the current project
@@ -217,11 +228,19 @@ references.
 
 Runs preRemove hooks before removal and postRemove hooks after.
 
+Hook failures fail closed. If a preRemove hook exits non-zero, the remaining
+hooks are skipped, the worktree and branch are kept, and gwt exits non-zero:
+fix the problem and re-run, or pass --ignore-hook-errors to remove anyway.
+If a postRemove hook fails, the worktree is already gone, so gwt finishes
+(branch delete, prune) and then exits non-zero. --ignore-hook-errors turns
+all hook failures into warnings (the pre-0.18 behavior).
+
 If the worktree was already removed outside gwt (e.g. by plain git or
 `gh pr merge --delete-branch`), still runs preRemove and postRemove from
 the project root with ${worktreePath} set to where the worktree would
 have been, deletes the local branch if it is left, and prunes stale
-worktree references. Fails with \"not found\" only when there are no
+worktree references. A failing preRemove there also stops before the
+branch is deleted. Fails with \"not found\" only when there are no
 remove hooks and no such local branch.
 
 NOTE: --force is required for non-interactive (AI agent) usage.")]
@@ -231,6 +250,10 @@ NOTE: --force is required for non-interactive (AI agent) usage.")]
         /// Skip confirmation prompts
         #[arg(short, long)]
         force: bool,
+        /// Warn about failing preRemove/postRemove hooks and remove anyway,
+        /// instead of keeping the worktree and exiting non-zero
+        #[arg(long)]
+        ignore_hook_errors: bool,
     },
 
     /// Print the worktrees folder path (cd helper)
