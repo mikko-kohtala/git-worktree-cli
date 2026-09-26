@@ -114,6 +114,25 @@ pub fn branch_exists(git_dir: &Path, branch_name: &str) -> Result<(bool, bool)> 
     Ok((!local.is_empty(), !remote.is_empty()))
 }
 
+/// Whether a local branch with exactly this name exists (no glob matching)
+pub fn local_branch_exists(git_dir: &Path, branch_name: &str) -> bool {
+    execute_capture(
+        &[
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{}", branch_name),
+        ],
+        Some(git_dir),
+    )
+    .is_ok()
+}
+
+/// Whether a name is a valid branch name (`git check-ref-format --branch`)
+pub fn is_valid_branch_name(git_dir: &Path, branch_name: &str) -> bool {
+    execute_capture(&["check-ref-format", "--branch", branch_name], Some(git_dir)).is_ok()
+}
+
 /// Find a local branch with case-insensitive matching (for macOS compatibility)
 /// Returns the actual branch name if found, None otherwise
 pub fn find_local_branch_case_insensitive(git_dir: &Path, branch_name: &str) -> Result<Option<String>> {

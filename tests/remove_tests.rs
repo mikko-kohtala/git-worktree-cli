@@ -133,7 +133,7 @@ fn remove_runs_hooks_and_deletes_branch_when_worktree_already_removed_with_git()
         .gwt_remove("feature-x")
         .success()
         .stdout(predicate::str::contains("Worktree for 'feature-x' was already removed"))
-        .stdout(predicate::str::contains("ran the remove hooks for 'feature-x'"));
+        .stdout(predicate::str::contains("ran the remove hooks, branch deleted"));
 
     let path = path.display();
     let repo = project.repo.display();
@@ -162,7 +162,7 @@ fn remove_runs_hooks_when_worktree_and_branch_are_already_gone() {
     project
         .gwt_remove("feature-x")
         .success()
-        .stdout(predicate::str::contains("Branch 'feature-x' already deleted"));
+        .stdout(predicate::str::contains("feature-x (already deleted)"));
 
     assert_eq!(project.hook_log().len(), 2);
     assert!(project.hook_log()[0].starts_with("preRemove|feature-x|"));
@@ -230,6 +230,7 @@ fn remove_runs_hooks_for_orphaned_worktree() {
         .stdout(predicate::str::contains("orphaned worktree"));
 
     assert!(!path.exists());
+    assert!(!project.branch_exists("feature-y"), "orphan's branch should be deleted");
     let path = path.display();
     let repo = project.repo.display();
     assert_eq!(
@@ -239,4 +240,21 @@ fn remove_runs_hooks_for_orphaned_worktree() {
             format!("postRemove|feature-y|{path}|{repo}"),
         ]
     );
+}
+
+#[test]
+#[serial]
+fn remove_rejects_glob_names_without_running_hooks() {
+    require_git!();
+    let project = Project::new(true);
+    let path = project.add_worktree("feature-a");
+    project.git(&["worktree", "remove", path.to_str().unwrap()], &project.repo);
+
+    project
+        .gwt_remove("feature-*")
+        .failure()
+        .stderr(predicate::str::contains("Worktree for 'feature-*' not found"));
+
+    assert!(project.hook_log().is_empty());
+    assert!(project.branch_exists("feature-a"));
 }

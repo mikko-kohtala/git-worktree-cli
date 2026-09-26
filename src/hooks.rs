@@ -23,11 +23,6 @@ fn configured_hooks(hook_type: &str) -> Result<Vec<String>> {
     Ok(commands.unwrap_or_default())
 }
 
-/// Whether the project config defines any preRemove or postRemove commands
-pub fn has_remove_hooks() -> Result<bool> {
-    Ok(!configured_hooks("preRemove")?.is_empty() || !configured_hooks("postRemove")?.is_empty())
-}
-
 pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&str, &str)]) -> Result<()> {
     let hook_commands = configured_hooks(hook_type)?;
     if hook_commands.is_empty() {

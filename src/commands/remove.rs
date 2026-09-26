@@ -16,6 +16,7 @@ use std::io::{self, IsTerminal, Write};
 
 use super::list_helpers::{colored_pr_status, PrContext, PullRequestInfo};
 use crate::{
+    config::GitWorktreeConfig,
     constants,
     core::project::{
         clean_branch_name, find_git_directory, find_project_root, find_project_root_from, find_valid_git_directory,
@@ -456,18 +457,9 @@ fn remove_worktree(
     }
 
     // Ask for confirmation unless --force is used or the user already confirmed
-    if !force && !skip_confirm {
-        print!("\n{}", "Are you sure you want to remove this worktree? (y/N): ".cyan());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let confirmation = input.trim().to_lowercase();
-
-        if confirmation != "y" && confirmation != "yes" {
-            println!("{}", "Removal cancelled.".yellow());
-            return Ok(());
-        }
+    if !force && !skip_confirm && !confirm("\nAre you sure you want to remove this worktree? (y/N): ")? {
+        println!("{}", "Removal cancelled.".yellow());
+        return Ok(());
     }
 
     // Find project root from the worktree being removed (go up one level)
@@ -564,45 +556,63 @@ fn remove_worktree(
     Ok(())
 }
 
+/// Ask a y/N question on stdin; anything but "y"/"yes" means no
+fn confirm(prompt: &str) -> Result<bool> {
+    print!("{}", prompt.cyan());
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let answer = input.trim().to_lowercase();
+    Ok(answer == "y" || answer == "yes")
+}
+
+/// Branches gwt never deletes or runs cleanup for: the built-in protected
+/// list plus the project's configured main branch, compared case-insensitively
+/// (macOS file systems treat refs case-insensitively)
+fn is_protected_branch(branch: &str, main_branch: Option<&str>) -> bool {
+    constants::PROTECTED_BRANCHES
+        .iter()
+        .copied()
+        .chain(main_branch)
+        .any(|protected| protected.eq_ignore_ascii_case(branch))
+}
+
 /// Delete a local branch with `git branch -d`. If it has unmerged changes,
 /// force-delete it with `-D` when `force` is set, otherwise ask first.
-fn delete_branch(branch: &str, git_working_dir: &std::path::Path, force: bool) -> Result<()> {
+/// Returns whether the branch was deleted.
+fn delete_branch(branch: &str, git_working_dir: &std::path::Path, force: bool) -> Result<bool> {
     let err = match git::execute_capture(&["branch", "-d", branch], Some(git_working_dir)) {
         Ok(_) => {
             println!("{}", format!("✓ Branch deleted: {}", branch).green());
-            return Ok(());
+            return Ok(true);
         }
         Err(e) => e,
     };
 
     if !err.to_string().contains("not fully merged") {
         println!("{}", format!("❌ Failed to delete branch '{}': {}", branch, err).red());
-        return Ok(());
+        return Ok(false);
     }
 
     println!("{}", format!("⚠️  Branch '{}' has unmerged changes", branch).yellow());
 
     // Ask for confirmation to force delete unless --force is used
-    let should_force_delete = force || {
-        print!("{}", "Force delete the branch? (y/N): ".cyan());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let answer = input.trim().to_lowercase();
-        answer == "y" || answer == "yes"
-    };
-
-    if !should_force_delete {
+    if !force && !confirm("Force delete the branch? (y/N): ")? {
         println!("{}", format!("⚠️  Branch '{}' was not deleted", branch).yellow());
-        return Ok(());
+        return Ok(false);
     }
 
     match git::execute_streaming(&["branch", "-D", branch], Some(git_working_dir)) {
-        Ok(_) => println!("{}", format!("✓ Branch force deleted: {}", branch).green()),
-        Err(e) => println!("{}", format!("❌ Failed to delete branch '{}': {}", branch, e).red()),
+        Ok(_) => {
+            println!("{}", format!("✓ Branch force deleted: {}", branch).green());
+            Ok(true)
+        }
+        Err(e) => {
+            println!("{}", format!("❌ Failed to delete branch '{}': {}", branch, e).red());
+            Ok(false)
+        }
     }
-    Ok(())
 }
 
 /// Handle `gwt remove <branch>` when git has no worktree for the branch,
@@ -612,8 +622,9 @@ fn delete_branch(branch: &str, git_working_dir: &std::path::Path, force: bool) -
 /// If the project has remove hooks or the local branch still exists, finish
 /// the cleanup: run preRemove and postRemove (from the project root, with
 /// `${worktreePath}` set to where `gwt add` would have put the worktree),
-/// delete the branch and prune stale worktree references. Otherwise there is
+/// prune stale worktree references and delete the branch. Otherwise there is
 /// nothing to do and it fails with "Worktree for '<branch>' not found".
+/// Invalid branch names and protected branches always get that error.
 fn remove_already_removed_worktree(
     git_dir: &std::path::Path,
     worktrees: &[git::Worktree],
@@ -625,13 +636,20 @@ fn remove_already_removed_worktree(
         Err(Error::msg(format!("Worktree for '{}' not found", branch)))
     };
 
-    // Never run cleanup for protected branches
-    if constants::PROTECTED_BRANCHES.contains(&branch) {
+    let config = GitWorktreeConfig::find_config()?.map(|(_, config)| config);
+    let main_branch = config.as_ref().map(|c| c.main_branch.as_str());
+
+    // Only real branch names (no globs or other shell-sensitive refs reach the
+    // hooks), and never cleanup for protected branches
+    if !git::is_valid_branch_name(git_dir, branch) || is_protected_branch(branch, main_branch) {
         return not_found();
     }
 
-    let has_hooks = hooks::has_remove_hooks()?;
-    let (branch_exists, _) = git::branch_exists(git_dir, branch)?;
+    let has_hooks = config
+        .as_ref()
+        .and_then(|c| c.hooks.as_ref())
+        .is_some_and(|hooks| hooks.has_remove_hooks());
+    let branch_exists = git::local_branch_exists(git_dir, branch);
     if !has_hooks && !branch_exists {
         return not_found();
     }
@@ -646,7 +664,15 @@ fn remove_already_removed_worktree(
     );
     println!("{}", "Cleaning up what is left:".cyan().bold());
     println!("  {}: {} (already removed)", "Path".dimmed(), worktree_path.display());
-    println!("  {}: {}", "Branch".dimmed(), branch.green());
+    println!(
+        "  {}: {}",
+        "Branch".dimmed(),
+        if branch_exists {
+            branch.green()
+        } else {
+            format!("{} (already deleted)", branch).dimmed()
+        }
+    );
     println!(
         "  {}: {}",
         "Hooks".dimmed(),
@@ -657,18 +683,9 @@ fn remove_already_removed_worktree(
         }
     );
 
-    if !force {
-        print!("\n{}", "Run the cleanup? (y/N): ".cyan());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let confirmation = input.trim().to_lowercase();
-
-        if confirmation != "y" && confirmation != "yes" {
-            println!("{}", "Removal cancelled.".yellow());
-            return Ok(());
-        }
+    if !force && !confirm("\nRun the cleanup? (y/N): ")? {
+        println!("{}", "Removal cancelled.".yellow());
+        return Ok(());
     }
 
     let variables = [("branchName", branch), ("worktreePath", worktree_path_str.as_str())];
@@ -684,29 +701,24 @@ fn remove_already_removed_worktree(
         Err(e) => println!("{}", format!("⚠️  Failed to prune worktree references: {}", e).yellow()),
     }
 
-    if branch_exists {
-        delete_branch(branch, git_dir, force)?;
-    } else {
-        println!("{}", format!("✓ Branch '{}' already deleted", branch).green());
-    }
+    let branch_left = branch_exists && !delete_branch(branch, git_dir, force)?;
 
     hooks::execute_hooks("postRemove", &project_root, &variables)?;
 
-    if has_hooks {
-        println!(
-            "{}",
-            format!("✓ Worktree was already removed; ran the remove hooks for '{}'", branch).green()
-        );
+    let hooks_summary = if has_hooks {
+        "ran the remove hooks"
     } else {
-        println!(
-            "{}",
-            format!(
-                "✓ Worktree was already removed; no remove hooks configured for '{}'",
-                branch
-            )
-            .green()
-        );
-    }
+        "no remove hooks configured"
+    };
+    let branch_summary = if branch_left { "branch kept" } else { "branch deleted" };
+    println!(
+        "{}",
+        format!(
+            "✓ Worktree for '{}' was already removed; {}, {}",
+            branch, hooks_summary, branch_summary
+        )
+        .green()
+    );
 
     Ok(())
 }
@@ -784,21 +796,9 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
     }
 
     // Ask for confirmation unless --force is used
-    if !force {
-        print!(
-            "\n{}",
-            "Are you sure you want to remove this orphaned worktree? (y/N): ".cyan()
-        );
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        let confirmation = input.trim().to_lowercase();
-
-        if confirmation != "y" && confirmation != "yes" {
-            println!("{}", "Removal cancelled.".yellow());
-            return Ok(());
-        }
+    if !force && !confirm("\nAre you sure you want to remove this orphaned worktree? (y/N): ")? {
+        println!("{}", "Removal cancelled.".yellow());
+        return Ok(());
     }
 
     let project_root = find_project_root()?;
@@ -826,7 +826,8 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
         format!("✓ Directory removed: {}", worktree_path.display()).green()
     );
 
-    // Try to prune worktree references from a valid git directory
+    // Try to prune worktree references from a valid git directory, then
+    // delete the worktree's branch like a regular removal does
     if let Ok(valid_git_dir) = find_valid_git_directory(&project_root) {
         println!("{}", "Pruning stale worktree references...".cyan());
         match git::prune_worktrees(&valid_git_dir) {
@@ -836,6 +837,13 @@ fn remove_orphaned_worktree(worktree_path: &std::path::Path, branch_name: &str, 
             Err(e) => {
                 println!("{}", format!("⚠️  Failed to prune worktree references: {}", e).yellow());
             }
+        }
+
+        let main_branch = GitWorktreeConfig::find_config()?.map(|(_, config)| config.main_branch);
+        if !is_protected_branch(branch_name, main_branch.as_deref())
+            && git::local_branch_exists(&valid_git_dir, branch_name)
+        {
+            delete_branch(branch_name, &valid_git_dir, force)?;
         }
     }
 

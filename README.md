@@ -105,7 +105,7 @@ Variables: `${branchName}`, `${worktreePath}`.
 
 Now `gwt add feature/x` and `gwt remove feature/x` run hooks automatically.
 
-If the worktree was already removed without gwt (plain `git worktree remove`, or `gh pr merge --delete-branch`), `gwt remove -f feature/x` still runs `preRemove` and `postRemove` from the project root, with `${worktreePath}` set to where `gwt add` would have put the worktree. It also deletes the local branch if it is still there and prunes stale worktree references. It fails with "Worktree for 'feature/x' not found" (non-zero exit) only when the project has no remove hooks and no such local branch. With hooks configured, a mistyped name runs the hooks for that name, so check the name before passing `-f`. Protected branches (main, master, dev, develop) are never cleaned up this way.
+If the worktree was already removed without gwt (plain `git worktree remove`, or `gh pr merge --delete-branch`), `gwt remove -f feature/x` still runs `preRemove` and `postRemove` from the project root, with `${worktreePath}` set to where `gwt add` would have put the worktree. It also deletes the local branch if it is still there and prunes stale worktree references. It fails with "Worktree for 'feature/x' not found" (non-zero exit) only when the project has no remove hooks and no such local branch. With hooks configured, a mistyped name runs the hooks for that name, so check the name before passing `-f`. Invalid branch names and protected branches (main, master, dev, develop and the configured `mainBranch`) are never cleaned up this way. An orphaned worktree (its `.git` file points to a missing git directory) also runs the remove hooks and has its branch deleted.
 
 ## PR Integration
 

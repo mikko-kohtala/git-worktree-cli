@@ -1,12 +1,10 @@
 use std::io::IsTerminal;
-use std::path::PathBuf;
 
-use crate::config::GitWorktreeConfig;
-use crate::core::project::find_project_root;
+use crate::core::project::{find_project_root, resolve_worktrees_path};
 use crate::error::{Error, Result};
 
 pub fn run(branch_name: Option<&str>) -> Result<()> {
-    let worktrees_path = resolve_worktrees_path()?;
+    let worktrees_path = resolve_worktrees_path(&find_project_root()?)?;
 
     let target = match branch_name {
         Some(branch) => {
@@ -46,17 +44,4 @@ pub fn run(branch_name: Option<&str>) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Resolve the worktrees folder path the same way 'gwt add' does
-fn resolve_worktrees_path() -> Result<PathBuf> {
-    let project_root = find_project_root()?;
-
-    if let Some((_config_path, config)) = GitWorktreeConfig::find_config()? {
-        if let Some(path) = config.get_worktrees_path() {
-            return Ok(path);
-        }
-    }
-
-    Ok(GitWorktreeConfig::derive_worktrees_path(&project_root))
 }
