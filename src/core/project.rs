@@ -141,6 +141,13 @@ fn find_main_project_from_worktrees_path(start_path: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Resolve the folder that holds a project's worktrees: the config's
+/// worktreesPath when set, otherwise `<repo>-worktrees` next to the project root
+pub fn resolve_worktrees_path(project_root: &Path) -> Result<PathBuf> {
+    let configured = GitWorktreeConfig::find_config()?.and_then(|(_, config)| config.get_worktrees_path());
+    Ok(configured.unwrap_or_else(|| GitWorktreeConfig::derive_worktrees_path(project_root)))
+}
+
 /// Find the .git directory within a project
 pub fn find_git_directory() -> Result<PathBuf> {
     let project_root = find_project_root()?;

@@ -5,33 +5,31 @@ use std::process::{Command, Stdio};
 use crate::config::GitWorktreeConfig;
 use crate::error::{Error, Result};
 
+/// Commands configured for a hook type, if any
+fn configured_hooks(hook_type: &str) -> Result<Vec<String>> {
+    let Some((_, config)) = GitWorktreeConfig::find_config()? else {
+        return Ok(Vec::new());
+    };
+    let Some(hooks) = config.hooks else {
+        return Ok(Vec::new());
+    };
+
+    let commands = match hook_type {
+        "postAdd" => hooks.post_add,
+        "preRemove" => hooks.pre_remove,
+        "postRemove" => hooks.post_remove,
+        _ => None,
+    };
+    Ok(commands.unwrap_or_default())
+}
+
+/// Whether the project config defines any preRemove or postRemove commands
+pub fn has_remove_hooks() -> Result<bool> {
+    Ok(!configured_hooks("preRemove")?.is_empty() || !configured_hooks("postRemove")?.is_empty())
+}
+
 pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&str, &str)]) -> Result<()> {
-    // Find the config file
-    let config = match GitWorktreeConfig::find_config()? {
-        Some((_, config)) => config,
-        None => {
-            // No config file found, skip hooks
-            return Ok(());
-        }
-    };
-
-    let hooks = match &config.hooks {
-        Some(hooks) => hooks,
-        None => return Ok(()),
-    };
-
-    let hook_commands = match hook_type {
-        "postAdd" => &hooks.post_add,
-        "preRemove" => &hooks.pre_remove,
-        "postRemove" => &hooks.post_remove,
-        _ => return Ok(()),
-    };
-
-    let hook_commands = match hook_commands {
-        Some(commands) => commands,
-        None => return Ok(()),
-    };
-
+    let hook_commands = configured_hooks(hook_type)?;
     if hook_commands.is_empty() {
         return Ok(());
     }
@@ -40,7 +38,7 @@ pub fn execute_hooks(hook_type: &str, working_directory: &Path, variables: &[(&s
 
     for hook in hook_commands {
         // Replace variables in the hook command
-        let mut command = hook.clone();
+        let mut command = hook;
         for (var_name, var_value) in variables {
             let placeholder = format!("${{{}}}", var_name);
             command = command.replace(&placeholder, var_value);
