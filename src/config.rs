@@ -35,6 +35,14 @@ pub struct Hooks {
     pub post_remove: Option<Vec<String>>,
 }
 
+impl Hooks {
+    /// Whether any preRemove or postRemove commands are configured
+    pub fn has_remove_hooks(&self) -> bool {
+        let non_empty = |commands: &Option<Vec<String>>| commands.as_ref().is_some_and(|c| !c.is_empty());
+        non_empty(&self.pre_remove) || non_empty(&self.post_remove)
+    }
+}
+
 impl GitWorktreeConfig {
     pub fn new(
         repository_url: String,

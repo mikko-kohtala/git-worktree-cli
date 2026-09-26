@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::config::GitWorktreeConfig;
-use crate::core::project::{find_existing_worktree, find_project_root};
+use crate::core::project::{find_existing_worktree, find_project_root, resolve_worktrees_path};
 use crate::error::{Error, Result};
 use crate::git;
 use crate::hooks;
@@ -126,14 +126,7 @@ fn determine_paths(branch_name: &str) -> Result<(PathBuf, PathBuf, PathBuf)> {
     let project_root = find_project_root()?;
     let git_working_dir = find_existing_worktree(&project_root)?;
 
-    // Get worktrees_path from config, or derive it from project_root
-    let worktrees_path = if let Some((_config_path, config)) = GitWorktreeConfig::find_config()? {
-        config
-            .get_worktrees_path()
-            .unwrap_or_else(|| GitWorktreeConfig::derive_worktrees_path(&project_root))
-    } else {
-        GitWorktreeConfig::derive_worktrees_path(&project_root)
-    };
+    let worktrees_path = resolve_worktrees_path(&project_root)?;
 
     // Create worktrees directory if it doesn't exist
     if !worktrees_path.exists() {

@@ -217,6 +217,13 @@ references.
 
 Runs preRemove hooks before removal and postRemove hooks after.
 
+If the worktree was already removed outside gwt (e.g. by plain git or
+`gh pr merge --delete-branch`), still runs preRemove and postRemove from
+the project root with ${worktreePath} set to where the worktree would
+have been, deletes the local branch if it is left, and prunes stale
+worktree references. Fails with \"not found\" only when there are no
+remove hooks and no such local branch.
+
 NOTE: --force is required for non-interactive (AI agent) usage.")]
     Remove {
         /// Branch name to remove (interactive selection if not specified)

@@ -20,6 +20,7 @@ pub fn setup_test_env() -> TempDir {
 }
 
 /// Clean up test environment
+#[allow(dead_code)]
 pub fn cleanup_test_env(temp_dir: TempDir) {
     // The TempDir will automatically clean up when dropped,
     // but we can also do explicit cleanup if needed
