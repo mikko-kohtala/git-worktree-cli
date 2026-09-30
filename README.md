@@ -5,10 +5,12 @@
 Work on multiple branches simultaneously without stashing or switching. Never lose context when switching between features. One repository, multiple working directories:
 
 ```bash
-my-project/                # Main branch (the repo)
-my-project-worktrees/
-├── feature-123/            # Feature branch
-└── bugfix-456/             # Bugfix branch
+code/
+├── my-project/             # Main branch (the repo)
+└── .worktrees/             # Shared by the repos in code/
+    └── my-project/
+        ├── feature-123/    # Feature branch
+        └── bugfix-456/     # Bugfix branch
 ```
 
 Each directory is independent. `cd` to switch between branches.
@@ -35,9 +37,9 @@ gwt add feature/user-auth
 gwt add hotfix/login-bug
 
 # Switch contexts with cd (no stashing)
-cd ../my-project-worktrees/feature/user-auth    # Work on feature
-cd ../my-project-worktrees/hotfix/login-bug     # Fix urgent bug
-cd ../my-project-worktrees/feature/user-auth    # Back to feature
+cd ../.worktrees/my-project/feature/user-auth    # Work on feature
+cd ../.worktrees/my-project/hotfix/login-bug     # Fix urgent bug
+cd ../.worktrees/my-project/feature/user-auth    # Back to feature
 
 # See all work with PR status
 gwt list
@@ -60,8 +62,8 @@ gwt remove hotfix/login-bug
 
 ## Commands
 
-- `gwt init [--local]` - Detect the current repo and write config (global by default)
-- `gwt add <branch> [--ignore-hook-errors]` - Create a worktree under `<repo>-worktrees`
+- `gwt init [--local] [--worktrees-root <dir>]` - Detect the current repo and write config (global by default)
+- `gwt add <branch> [--ignore-hook-errors]` - Create a worktree under `.worktrees/<repo>` next to the repo
 - `gwt list [--local]` - Show worktrees with PR status (`--local` skips remote PRs)
 - `gwt remove [branch] [--force] [--ignore-hook-errors]` - Delete a worktree (interactive picker without a branch; confirms one by one, `a` removes all remaining without further questions)
 - `gwt cd [branch]` - Print the worktrees folder (or a worktree) path; the shell wrapper installed by `gwt completions install` (bash, zsh, fish) makes it change directory
@@ -79,6 +81,22 @@ gwt remove hotfix/login-bug
 ## Configuration
 
 Config is stored globally by default at `~/.config/git-worktree-cli/projects/`. Use `gwt init --local` to store `git-worktree-config.jsonc` next to your repo instead.
+
+### Where worktrees go
+
+`gwt init` stores the worktrees folder as `worktreesPath` in the config. By default it is `.worktrees/<repo>` in the folder that holds the repo, so `~/code/my-project` gets `~/code/.worktrees/my-project/`. One hidden `.worktrees` folder serves all the repos in `~/code`. A repo at the home directory itself (dotfiles) is the exception: it gets `~/.worktrees/<user>/`, since its parent folder is not writable. Worktrees are not put inside the repo itself: tools that look for config in parent folders (Cargo workspaces, `node_modules`, ESLint, `CLAUDE.md`) would pick up the main checkout's files.
+
+To keep all worktrees under one folder, pass `--worktrees-root`, or set it for every `gwt init` in `~/.config/git-worktree-cli/settings.jsonc`:
+
+```json
+{ "worktreesRoot": "~/.worktrees" }
+```
+
+Each project then gets a folder named after its path relative to home: `~/code/mikko/my-project` becomes `~/.worktrees/code-mikko-my-project/`. This works for repos without a remote. If two paths map to the same name (`code/my-app` and `code-my/app`), `gwt init` refuses the second one; pass another `--worktrees-root` or set `worktreesPath` by hand.
+
+`gwt remove` deletes the folders a removal leaves empty, up to the shared `.worktrees` folder.
+
+Projects set up before 0.19 keep their `<repo>-worktrees` folder, since the path is in their config. To switch, run `gwt init` again (it rewrites the config, so copy your hooks first) and recreate or `git worktree move` the existing worktrees.
 
 ## Automation
 
