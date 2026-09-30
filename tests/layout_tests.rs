@@ -274,7 +274,10 @@ fn test_remove_from_inside_worktree_of_bare_layout() {
         &home.code,
     );
     git(&["worktree", "add", proj.join("main").to_str().unwrap(), "main"], &bare);
-    git(&["worktree", "add", worktree.to_str().unwrap(), "-b", "feat"], &bare);
+    git(
+        &["worktree", "add", worktree.to_str().unwrap(), "-b", "feat", "main"],
+        &bare,
+    );
     fs::write(
         home.code.join("git-worktree-config.jsonc"),
         format!(
