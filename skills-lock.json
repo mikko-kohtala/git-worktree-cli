@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "project-workflow": {
+      "source": "mikko-kohtala/skills",
+      "sourceType": "github",
+      "skillPath": "project-workflow/SKILL.md",
+      "computedHash": "42b325a211082d0575639851d33d3a173af73b627b5fa374dc31720704190da3"
+    }
+  }
+}
