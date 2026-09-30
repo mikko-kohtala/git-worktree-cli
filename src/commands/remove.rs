@@ -20,7 +20,7 @@ use crate::{
     constants,
     core::project::{
         clean_branch_name, find_git_directory, find_project_root, find_project_root_from, find_valid_git_directory,
-        is_orphaned_worktree, resolve_worktrees_path,
+        is_orphaned_worktree, remove_empty_worktree_parents, resolve_worktrees_path,
     },
     error::{Error, Result},
     git, hooks,
@@ -493,12 +493,8 @@ fn remove_worktree(
         return Ok(());
     }
 
-    // Find project root from the worktree being removed (go up one level)
-    let project_root = if let Some(parent) = target_worktree.path.parent() {
-        find_project_root_from(parent)?
-    } else {
-        find_project_root_from(&target_worktree.path)?
-    };
+    // Find project root from the worktree being removed
+    let project_root = find_project_root_from(&target_worktree.path)?;
 
     let variables = [
         ("branchName", branch_display),
@@ -572,6 +568,9 @@ fn remove_worktree(
         std::env::set_current_dir(&project_root)?;
     }
 
+    // After the cd above: finding the config needs a working directory that exists
+    remove_empty_folders(&target_worktree.path, &project_root);
+
     // Execute post-remove hooks
     let post_remove = hooks::execute_hooks("postRemove", &project_root, &variables, ignore_hook_errors);
 
@@ -584,6 +583,13 @@ fn remove_worktree(
     }
 
     post_remove.map_err(|e| post_remove_failed(e, branch_display))
+}
+
+/// Delete the folders a removed worktree left empty, up to the project's worktrees folder
+fn remove_empty_folders(worktree_path: &std::path::Path, project_root: &std::path::Path) {
+    if let Ok(worktrees_path) = resolve_worktrees_path(project_root) {
+        remove_empty_worktree_parents(worktree_path, &worktrees_path);
+    }
 }
 
 /// Explain a failed preRemove hook: nothing was removed. `kept` says what was
@@ -770,6 +776,8 @@ fn remove_already_removed_worktree(
         Err(e) => println!("{}", format!("⚠️  Failed to prune worktree references: {}", e).yellow()),
     }
 
+    remove_empty_folders(&worktree_path, &project_root);
+
     let branch_left = branch_exists && !delete_branch(branch, git_dir, force)?;
 
     let post_remove = hooks::execute_hooks("postRemove", &project_root, &variables, ignore_hook_errors);
@@ -911,6 +919,7 @@ fn remove_orphaned_worktree(
         "{}",
         format!("✓ Directory removed: {}", worktree_path.display()).green()
     );
+    remove_empty_folders(worktree_path, &project_root);
 
     // Try to prune worktree references from a valid git directory, then
     // delete the worktree's branch like a regular removal does

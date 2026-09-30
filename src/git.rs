@@ -156,6 +156,33 @@ pub fn get_git_root() -> Result<Option<PathBuf>> {
     }
 }
 
+/// The `.git` directory that the repository or worktree at `path` shares
+/// with all its worktrees (absolute), or None outside a repository
+pub fn get_common_dir(path: &Path) -> Option<PathBuf> {
+    execute_capture(&["rev-parse", "--path-format=absolute", "--git-common-dir"], Some(path))
+        .ok()
+        .map(PathBuf::from)
+}
+
+/// Main repository of the repository or worktree at `path`: the parent of
+/// the shared `.git` directory. None outside a repository, and for layouts
+/// where the shared directory is not a `.git` folder in a working tree
+/// (bare repositories, --separate-git-dir).
+pub fn get_main_repo_root(path: &Path) -> Option<PathBuf> {
+    let common_dir = get_common_dir(path)?;
+    if common_dir.file_name().is_some_and(|name| name == ".git") {
+        return common_dir.parent().map(Path::to_path_buf);
+    }
+    None
+}
+
+/// Working tree root of the repository or worktree at `path`
+pub fn get_toplevel(path: &Path) -> Option<PathBuf> {
+    execute_capture(&["rev-parse", "--show-toplevel"], Some(path))
+        .ok()
+        .map(PathBuf::from)
+}
+
 /// Get the remote origin URL from a git repository
 pub fn get_remote_origin_url(path: &Path) -> Option<String> {
     execute_capture(&["remote", "get-url", "origin"], Some(path)).ok()

@@ -21,7 +21,10 @@ fn test_gwt_init_existing_repo() {
 
     // Test gwt init in an existing repo with --local
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&repo_dir).arg("init").arg("--local");
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
 
     let output = cmd.assert().success();
 
@@ -33,7 +36,7 @@ fn test_gwt_init_existing_repo() {
         ))
         .stdout(predicate::str::contains("✓ Project path:"))
         .stdout(predicate::str::contains("✓ Worktrees path:"))
-        .stdout(predicate::str::contains("my-repo-worktrees"))
+        .stdout(predicate::str::contains(".worktrees/my-repo"))
         .stdout(predicate::str::contains("✓ Config saved to:"));
 
     // Check that config was created in parent directory (for --local)
@@ -45,7 +48,7 @@ fn test_gwt_init_existing_repo() {
     assert!(config_content.contains("\"repositoryUrl\": \"git@github.com:test/my-repo.git\""));
     assert!(config_content.contains("\"mainBranch\":"));
     assert!(config_content.contains("\"worktreesPath\":"));
-    assert!(config_content.contains("my-repo-worktrees"));
+    assert!(config_content.contains(".worktrees/my-repo"));
 
     cleanup_test_env(temp_dir);
 }
@@ -58,7 +61,7 @@ fn test_gwt_init_not_in_git_repo() {
 
     // Test gwt init outside a git repository - should fail
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path).arg("init");
+    cmd.current_dir(temp_path).env("HOME", temp_path).arg("init");
 
     cmd.assert()
         .failure()
@@ -82,7 +85,7 @@ fn test_gwt_init_no_remote() {
 
     // Test gwt init - should fail because no remote
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(temp_path).arg("init");
+    cmd.current_dir(temp_path).env("HOME", temp_path).arg("init");
 
     cmd.assert()
         .failure()
@@ -141,7 +144,10 @@ fn test_gwt_init_bitbucket_repo() {
 
     // Test gwt init with --local
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&repo_dir).arg("init").arg("--local");
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
 
     let output = cmd.assert().success();
 
@@ -163,7 +169,10 @@ fn test_gwt_init_github_enterprise_repo() {
     create_test_git_repo(&repo_dir, "acme@acme.ghe.com:acme-org/my-ghe-repo.git");
 
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&repo_dir).arg("init").arg("--local");
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
 
     let output = cmd.assert().success();
 
@@ -194,7 +203,7 @@ fn test_gwt_init_unsupported_provider() {
 
     // Test gwt init - should fail with unsupported provider
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&repo_dir).arg("init");
+    cmd.current_dir(&repo_dir).env("HOME", temp_path).arg("init");
 
     cmd.assert()
         .failure()
@@ -217,7 +226,10 @@ fn test_config_worktrees_path_derivation() {
 
     // Initialize
     let mut cmd = Command::cargo_bin("gwt").unwrap();
-    cmd.current_dir(&repo_dir).arg("init").arg("--local");
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
 
     cmd.assert().success();
 
@@ -225,10 +237,11 @@ fn test_config_worktrees_path_derivation() {
     let config_path = temp_path.join("git-worktree-config.jsonc");
     let config_content = fs::read_to_string(&config_path).unwrap();
 
-    // Should have worktrees path as sibling with -worktrees suffix
+    // Should have worktrees path in the shared .worktrees folder next to the repo
     assert!(
-        config_content.contains("agent-tools-worktrees"),
-        "Config should have worktrees path with -worktrees suffix"
+        config_content.contains(".worktrees/agent-tools\""),
+        "Config should have worktrees path .worktrees/agent-tools: {}",
+        config_content
     );
 
     cleanup_test_env(temp_dir);

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::cli::Provider;
 use crate::error::{Error, Result};
@@ -75,20 +75,35 @@ impl GitWorktreeConfig {
         }
     }
 
-    /// Derive worktrees path from project path (repo-name -> repo-name-worktrees)
-    pub fn derive_worktrees_path(project_path: &Path) -> PathBuf {
+    /// Default worktrees path for a project: `<root>/<encoded project path>`
+    /// when a worktrees root is set, otherwise `<parent>/.worktrees/<repo-name>`
+    pub fn default_worktrees_path(project_path: &Path, worktrees_root: Option<&Path>) -> PathBuf {
+        match worktrees_root {
+            // Stored in the config, so a relative root must not depend on where gwt runs later
+            Some(root) => {
+                let root = expand_home(root);
+                normalize(&std::path::absolute(&root).unwrap_or(root)).join(encode_project_path(project_path))
+            }
+            None => {
+                let repo_name = project_path.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
+                // A repository at home (dotfiles): its parent (/Users, /home) is
+                // not writable, and every folder under home is inside the repo anyway
+                let is_home = dirs::home_dir().is_some_and(|home| home == project_path);
+                match project_path.parent() {
+                    Some(parent) if !is_home => parent.join(WORKTREES_DIR).join(repo_name),
+                    _ => project_path.join(WORKTREES_DIR).join(repo_name),
+                }
+            }
+        }
+    }
+
+    /// Worktrees path used before 0.19: `<repo-name>-worktrees` next to the project
+    pub fn legacy_worktrees_path(project_path: &Path) -> PathBuf {
         let repo_name = project_path.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
         project_path
             .parent()
             .map(|p| p.join(format!("{}-worktrees", repo_name)))
             .unwrap_or_else(|| project_path.join("worktrees"))
-    }
-
-    /// Get worktrees path, deriving from project_path if not stored
-    pub fn get_worktrees_path(&self) -> Option<PathBuf> {
-        self.worktrees_path
-            .clone()
-            .or_else(|| self.project_path.as_ref().map(|p| Self::derive_worktrees_path(p)))
     }
 
     pub fn save(&self, path: &Path) -> Result<()> {
@@ -175,29 +190,23 @@ impl GitWorktreeConfig {
         }
 
         // Strategy 2: Search all configs for matching project_path or worktrees_path
-        if let Ok(entries) = fs::read_dir(&projects_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map(|e| e == "jsonc").unwrap_or(false) {
-                    if let Ok(config) = Self::load(&path) {
-                        // Check project_path
-                        if let Some(ref project_path) = config.project_path {
-                            if start_dir.starts_with(project_path) {
-                                return Ok(Some((path, config)));
-                            }
-                        }
-                        // Also check worktrees_path
-                        if let Some(ref worktrees_path) = config.worktrees_path {
-                            if start_dir.starts_with(worktrees_path) {
-                                return Ok(Some((path, config)));
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        Ok(Self::global_configs()?.into_iter().find(|(_, config)| {
+            config.project_path.as_ref().is_some_and(|p| start_dir.starts_with(p))
+                || config.worktrees_path.as_ref().is_some_and(|w| start_dir.starts_with(w))
+        }))
+    }
 
-        Ok(None)
+    /// All readable global project configs
+    pub fn global_configs() -> Result<Vec<(PathBuf, Self)>> {
+        let Ok(entries) = fs::read_dir(Self::projects_config_dir()?) else {
+            return Ok(Vec::new());
+        };
+        Ok(entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|e| e == "jsonc"))
+            .filter_map(|path| Self::load(&path).ok().map(|config| (path, config)))
+            .collect())
     }
 
     /// Get the global config directory (~/.config/git-worktree-cli)
@@ -299,7 +308,74 @@ fn short_hash(s: &str) -> String {
     format!("{:x}", hasher.finish())[..12].to_string()
 }
 
+/// User-wide settings, read from ~/.config/git-worktree-cli/settings.jsonc
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Put new projects' worktrees under this folder instead of a
+    /// `.worktrees` folder next to the repository
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktrees_root: Option<PathBuf>,
+}
+
+impl Settings {
+    /// Load the settings file, or defaults when there is none
+    pub fn load() -> Result<Self> {
+        let path = GitWorktreeConfig::global_config_dir()?.join(SETTINGS_FILENAME);
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let content = fs::read_to_string(&path)
+            .map_err(|e| Error::config(format!("Failed to read {}: {}", path.display(), e)))?;
+        json5::from_str(&content).map_err(|e| Error::config(format!("Failed to parse {}: {}", path.display(), e)))
+    }
+}
+
+/// Expand a leading `~` to the home directory
+pub fn expand_home(path: &Path) -> PathBuf {
+    match (path.strip_prefix("~"), dirs::home_dir()) {
+        (Ok(rest), Some(home)) => home.join(rest),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Drop `.` and resolve `..` components without touching the file system
+fn normalize(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other),
+        }
+    }
+    normalized
+}
+
+/// Folder name for a project under a worktrees root: its path relative to the
+/// home directory (or its absolute path outside home), joined with dashes,
+/// e.g. ~/code/mikko/my-app -> code-mikko-my-app
+fn encode_project_path(project_path: &Path) -> String {
+    let relative = dirs::home_dir()
+        .and_then(|home| project_path.strip_prefix(home).ok().map(Path::to_path_buf))
+        .filter(|relative| !relative.as_os_str().is_empty())
+        .unwrap_or_else(|| project_path.to_path_buf());
+    relative
+        .components()
+        .filter_map(|c| match c {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 pub const CONFIG_FILENAME: &str = "git-worktree-config.jsonc";
+pub const SETTINGS_FILENAME: &str = "settings.jsonc";
+/// Shared folder next to the repositories that holds their worktrees
+pub const WORKTREES_DIR: &str = ".worktrees";
 
 #[cfg(test)]
 mod tests {
@@ -430,6 +506,55 @@ mod tests {
         assert_eq!(
             generate_config_filename("https://bitbucket.org/workspace/repo.git"),
             "bitbucket_workspace_repo.jsonc"
+        );
+    }
+
+    #[test]
+    fn test_default_worktrees_path_next_to_repo() {
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(Path::new("/src/code/my-app"), None),
+            PathBuf::from("/src/code/.worktrees/my-app")
+        );
+    }
+
+    #[test]
+    fn test_default_worktrees_path_for_repo_at_home() {
+        let home = dirs::home_dir().unwrap();
+        let name = home.file_name().unwrap();
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(&home, None),
+            home.join(".worktrees").join(name)
+        );
+    }
+
+    #[test]
+    fn test_default_worktrees_path_under_root() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(
+                &home.join("code").join("mikko").join("my-app"),
+                Some(Path::new("~/.worktrees"))
+            ),
+            home.join(".worktrees").join("code-mikko-my-app")
+        );
+        // A repository at home gets the absolute path
+        let home_name = home.components().filter_map(|c| match c {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        });
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(&home, Some(Path::new("~/.worktrees"))),
+            home.join(".worktrees").join(home_name.collect::<Vec<_>>().join("-"))
+        );
+        // Relative roots are made absolute
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(Path::new("/x/my-app"), Some(Path::new("/a/b/../wt/."))),
+            PathBuf::from("/a/wt/x-my-app")
+        );
+        // Outside home the absolute path is used
+        assert_eq!(
+            GitWorktreeConfig::default_worktrees_path(Path::new("/Volumes/work/my-app"), Some(Path::new("/wt"))),
+            PathBuf::from("/wt/Volumes-work-my-app")
         );
     }
 

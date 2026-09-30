@@ -27,8 +27,8 @@ fn run() -> Result<()> {
     };
 
     match command {
-        Commands::Init { local } => {
-            init::run(local)?;
+        Commands::Init { local, worktrees_root } => {
+            init::run(local, worktrees_root)?;
         }
         Commands::Add {
             branch_name,

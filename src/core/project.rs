@@ -3,7 +3,7 @@
 //! This module handles finding project roots, git directories, and managing
 //! project-related operations.
 
-use crate::config::GitWorktreeConfig;
+use crate::config::{expand_home, GitWorktreeConfig, Settings, WORKTREES_DIR};
 use crate::error::{Error, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,26 +47,26 @@ pub fn find_project_root() -> Result<PathBuf> {
 /// Find the project root starting from a specific path
 ///
 /// The project root is the main repository directory (where .git is).
-/// This handles both:
-/// - Running from inside the main repo
-/// - Running from inside a worktree in the -worktrees folder
+/// This handles running from inside the main repo, from inside any of its
+/// worktrees, and from a worktrees folder that is not itself a worktree.
 pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
-    // Strategy 1: Check if we're in a git repository directly
-    if let Ok(Some(git_root)) = crate::git::get_git_root() {
-        // Check if this git root is inside a -worktrees folder (it's a worktree)
-        if let Some(main_project) = find_main_project_from_worktree(&git_root) {
-            return Ok(main_project);
-        }
-        // Otherwise, this is the main project
-        return Ok(git_root);
+    // Strategy 1: Inside the repository or one of its worktrees, git knows the main repository
+    if let Some(main_repo) = crate::git::get_main_repo_root(start_path) {
+        return Ok(main_repo);
     }
 
-    // Strategy 2: Check if we're inside a -worktrees folder (but not in a git worktree)
+    // Other layouts (bare repository, --separate-git-dir): a worktree in a
+    // worktrees folder maps back by folder name, otherwise it is the project
+    if let Some(toplevel) = crate::git::get_toplevel(start_path) {
+        return Ok(find_main_project_from_worktrees_path(&toplevel).unwrap_or(toplevel));
+    }
+
+    // Strategy 2: Inside a worktrees folder (but not in a git worktree)
     if let Some(main_project) = find_main_project_from_worktrees_path(start_path) {
         return Ok(main_project);
     }
 
-    // Strategy 3: Check global config
+    // Strategy 3: Check config (matches a configured projectPath or worktreesPath)
     if let Ok(Some((_config_path, config))) = GitWorktreeConfig::find_config() {
         if let Some(project_path) = config.project_path {
             return Ok(project_path);
@@ -78,74 +78,88 @@ pub fn find_project_root_from(start_path: &Path) -> Result<PathBuf> {
     ))
 }
 
-/// Check if a path is inside a -worktrees folder and return the main project path
-fn find_main_project_from_worktree(worktree_path: &Path) -> Option<PathBuf> {
-    // Walk up the path to see if any ancestor ends with -worktrees
-    for ancestor in worktree_path.ancestors() {
-        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
-            if name.ends_with("-worktrees") {
-                // Found worktrees folder, derive main project path
-                let main_name = name.trim_end_matches("-worktrees");
-                if let Some(parent) = ancestor.parent() {
-                    let main_project = parent.join(main_name);
-                    // Check if main_project itself has .git
-                    if main_project.join(".git").exists() {
-                        return Some(main_project);
-                    }
-                    // Also check if main_project contains a subdirectory with .git
-                    if let Ok(entries) = fs::read_dir(&main_project) {
-                        for entry in entries.flatten() {
-                            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                                let subdir = entry.path();
-                                if subdir.join(".git").exists() {
-                                    return Some(main_project);
-                                }
-                            }
-                        }
-                    }
-                }
+/// Map a path inside a worktrees folder back to its project:
+/// `<parent>/.worktrees/<repo>/...` -> `<parent>/<repo>`, and the legacy
+/// `<parent>/<repo>-worktrees/...` -> `<parent>/<repo>`
+fn find_main_project_from_worktrees_path(start_path: &Path) -> Option<PathBuf> {
+    let mut child: Option<&Path> = None;
+    for ancestor in start_path.ancestors() {
+        let name = ancestor.file_name().and_then(|n| n.to_str());
+        let parent = ancestor.parent();
+        let candidate = match (name, parent) {
+            (Some(WORKTREES_DIR), Some(parent)) => child
+                .and_then(|c| c.file_name())
+                .map(|repo_name| parent.join(repo_name)),
+            (Some(name), Some(parent)) if name.ends_with("-worktrees") => {
+                Some(parent.join(name.trim_end_matches("-worktrees")))
             }
+            _ => None,
+        };
+        if let Some(main_project) = candidate.filter(|p| is_project_dir(p)) {
+            return Some(main_project);
         }
+        child = Some(ancestor);
     }
     None
 }
 
-/// Check if start_path is inside a -worktrees folder structure
-fn find_main_project_from_worktrees_path(start_path: &Path) -> Option<PathBuf> {
-    for ancestor in start_path.ancestors() {
-        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
-            if name.ends_with("-worktrees") {
-                let main_name = name.trim_end_matches("-worktrees");
-                if let Some(parent) = ancestor.parent() {
-                    let main_project = parent.join(main_name);
-                    // Check if main_project itself has .git
-                    if main_project.join(".git").exists() {
-                        return Some(main_project);
-                    }
-                    // Also check if main_project contains a subdirectory with .git
-                    // (handles structures like agent-tools/main/.git)
-                    if let Ok(entries) = fs::read_dir(&main_project) {
-                        for entry in entries.flatten() {
-                            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                                let subdir = entry.path();
-                                if subdir.join(".git").exists() {
-                                    return Some(main_project);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+/// Whether `path` is a repository, or a folder holding one (like `agent-tools/main/.git`)
+fn is_project_dir(path: &Path) -> bool {
+    if path.join(".git").exists() {
+        return true;
     }
-    None
+    fs::read_dir(path)
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|entry| entry.file_type().is_ok_and(|t| t.is_dir()) && entry.path().join(".git").exists())
+        })
+        .unwrap_or(false)
 }
 
 /// Resolve the folder that holds a project's worktrees: the config's
-/// worktreesPath when set, otherwise `<repo>-worktrees` next to the project root
+/// worktreesPath when set, otherwise the legacy `<repo>-worktrees` folder if
+/// it exists, otherwise the default for new projects
 pub fn resolve_worktrees_path(project_root: &Path) -> Result<PathBuf> {
-    let configured = GitWorktreeConfig::find_config()?.and_then(|(_, config)| config.get_worktrees_path());
-    Ok(configured.unwrap_or_else(|| GitWorktreeConfig::derive_worktrees_path(project_root)))
+    let config = GitWorktreeConfig::find_config()?.map(|(_, config)| config);
+    if let Some(path) = config.as_ref().and_then(|c| c.worktrees_path.as_deref()) {
+        return Ok(expand_home(path));
+    }
+    let project_path = config
+        .and_then(|c| c.project_path)
+        .unwrap_or_else(|| project_root.to_path_buf());
+    let legacy = GitWorktreeConfig::legacy_worktrees_path(&project_path);
+    if legacy.is_dir() {
+        return Ok(legacy);
+    }
+    let settings = Settings::load()?;
+    Ok(GitWorktreeConfig::default_worktrees_path(
+        &project_path,
+        settings.worktrees_root.as_deref(),
+    ))
+}
+
+/// Delete folders a removed worktree left empty: its parent folders up to and
+/// including the project's worktrees folder, and the shared `.worktrees`
+/// folder above that once no project uses it
+pub fn remove_empty_worktree_parents(worktree_path: &Path, worktrees_path: &Path) {
+    // Compare real paths, as git reports them (/var -> /private/var on macOS)
+    let Ok(worktrees_path) = worktrees_path.canonicalize() else {
+        return;
+    };
+    let stop = match worktrees_path.parent() {
+        Some(parent) if parent.file_name().is_some_and(|n| n == WORKTREES_DIR) => parent.to_path_buf(),
+        _ => worktrees_path.clone(),
+    };
+    let start = worktree_path.parent().and_then(|p| p.canonicalize().ok());
+    let mut dir = start.as_deref();
+    while let Some(current) = dir {
+        // remove_dir only deletes empty folders; stop at the first one in use
+        if !current.starts_with(&stop) || fs::remove_dir(current).is_err() {
+            break;
+        }
+        dir = current.parent();
+    }
 }
 
 /// Find the .git directory within a project

@@ -1,14 +1,15 @@
 use colored::Colorize;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::cli::Provider;
-use crate::config::{generate_config_filename, GitWorktreeConfig, CONFIG_FILENAME};
+use crate::config::{generate_config_filename, GitWorktreeConfig, Settings, CONFIG_FILENAME};
 use crate::error::{Error, Result};
 use crate::git;
 use crate::{azure_devops, bitbucket_api, github};
 
 /// Initialize git-worktree-cli for an existing repository
-pub fn run(local: bool) -> Result<()> {
+pub fn run(local: bool, worktrees_root: Option<PathBuf>) -> Result<()> {
     // Check if we're in a git repository
     let git_root = git::get_git_root()?
         .ok_or_else(|| Error::git("Not in a git repository. Please run this command from inside a git repository."))?;
@@ -29,8 +30,14 @@ pub fn run(local: bool) -> Result<()> {
     // Use the git root as the project path
     let project_path = git_root.canonicalize().unwrap_or_else(|_| git_root.clone());
 
-    // Derive the worktrees path (repo-name -> repo-name-worktrees)
-    let worktrees_path = GitWorktreeConfig::derive_worktrees_path(&project_path);
+    // Derive the worktrees path: under the worktrees root when one is given
+    // (flag, then settings), otherwise <parent>/.worktrees/<repo-name>
+    let worktrees_root = match worktrees_root {
+        Some(root) => Some(root),
+        None => Settings::load()?.worktrees_root,
+    };
+    let worktrees_path = GitWorktreeConfig::default_worktrees_path(&project_path, worktrees_root.as_deref());
+    ensure_worktrees_path_is_free(&worktrees_path, &project_path)?;
 
     // Create configuration
     let config = GitWorktreeConfig::new(
@@ -72,6 +79,74 @@ pub fn run(local: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Refuse a worktrees folder that another project already uses, either by
+/// config or with worktrees on disk. Two project paths can encode to the same
+/// folder name under a worktrees root (code/my-app and code-my/app).
+fn ensure_worktrees_path_is_free(worktrees_path: &Path, project_path: &Path) -> Result<()> {
+    let in_use_by = |other: &Path| {
+        Error::config(format!(
+            "Worktrees folder {} is already used by {}.\n\
+             Run 'gwt init' with a different --worktrees-root, or set worktreesPath in the config by hand.",
+            worktrees_path.display(),
+            other.display()
+        ))
+    };
+
+    for (_, config) in GitWorktreeConfig::global_configs()? {
+        if let (Some(other_worktrees), Some(other_project)) = (&config.worktrees_path, &config.project_path) {
+            if other_worktrees == worktrees_path && other_project != project_path {
+                return Err(in_use_by(other_project));
+            }
+        }
+    }
+
+    let own_git_dir = git::get_common_dir(project_path).and_then(|dir| dir.canonicalize().ok());
+    if let Some(other_git_dir) = find_foreign_worktree(worktrees_path, own_git_dir.as_deref(), 0) {
+        let other = other_git_dir.parent().unwrap_or(&other_git_dir).to_path_buf();
+        return Err(in_use_by(&other));
+    }
+    Ok(())
+}
+
+/// The `.git` directory of the first worktree under `dir` that belongs to a
+/// repository other than `own_git_dir`. Branch folders nest (feature/x), so
+/// this descends until it finds a worktree.
+fn find_foreign_worktree(dir: &Path, own_git_dir: Option<&Path>, depth: usize) -> Option<PathBuf> {
+    const MAX_DEPTH: usize = 6;
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        let git_file = path.join(".git");
+        if git_file.is_file() {
+            // "gitdir: <repo>/.git/worktrees/<name>"
+            let Some(common_dir) = fs::read_to_string(&git_file).ok().and_then(|content| {
+                let gitdir = content
+                    .lines()
+                    .find_map(|l| l.strip_prefix("gitdir: "))?
+                    .trim()
+                    .to_string();
+                // Relative with worktree.useRelativePaths; join keeps absolute paths as they are
+                let gitdir = path.join(gitdir);
+                let common_dir = gitdir.parent()?.parent()?;
+                Some(common_dir.canonicalize().unwrap_or_else(|_| common_dir.to_path_buf()))
+            }) else {
+                continue;
+            };
+            if own_git_dir != Some(common_dir.as_path()) {
+                return Some(common_dir);
+            }
+        } else if depth < MAX_DEPTH {
+            if let Some(found) = find_foreign_worktree(&path, own_git_dir, depth + 1) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn detect_provider_from_url(repo_url: &str) -> Option<Provider> {

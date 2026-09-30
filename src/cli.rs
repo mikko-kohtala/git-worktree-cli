@@ -13,9 +13,10 @@ gwt organizes git worktrees so you can work on multiple branches simultaneously.
 Instead of stashing and switching branches, each branch gets its own directory:
 
   my-repo/                    <- main repository (run gwt commands here)
-  my-repo-worktrees/          <- created automatically by gwt
-    feature/auth/             <- each branch is a separate directory
-    bugfix/fix-123/
+  .worktrees/                 <- created automatically by gwt, shared by
+    my-repo/                     the repositories in this folder
+      feature/auth/           <- each branch is a separate directory
+      bugfix/fix-123/
 
 Switch between branches by changing directories with cd.
 
@@ -34,7 +35,7 @@ EXAMPLES:
   gwt add feature/user-auth
 
   # Switch to it
-  cd ../my-repo-worktrees/feature/user-auth
+  cd ../.worktrees/my-repo/feature/user-auth
 
   # See all worktrees and their PR status
   gwt list
@@ -43,8 +44,11 @@ EXAMPLES:
   gwt remove feature/user-auth --force
 
 CONFIG:
-  Global: ~/.config/git-worktree-cli/projects/<repo>.jsonc
-  Local:  ./git-worktree-config.jsonc (with gwt init --local)
+  Global:   ~/.config/git-worktree-cli/projects/<repo>.jsonc
+  Local:    ./git-worktree-config.jsonc (with gwt init --local)
+  Settings: ~/.config/git-worktree-cli/settings.jsonc
+            { \"worktreesRoot\": \"~/.worktrees\" } keeps all worktrees under
+            one folder (used by gwt init)
 
   Config supports hooks (postAdd, preRemove, postRemove) that run
   shell commands automatically. Variables: ${branchName}, ${worktreePath}
@@ -149,10 +153,20 @@ Initialize git-worktree-cli for an existing repository.
 Run this once inside a git repository that has a remote origin. gwt will:
   - Detect the provider (GitHub, Bitbucket Cloud, Bitbucket Data Center, Azure DevOps)
   - Detect the default branch from the remote
-  - Derive the worktrees path (<repo-name>-worktrees/ as a sibling directory)
+  - Derive the worktrees path: .worktrees/<repo-name>/ in the folder that
+    holds the repository, e.g. ~/code/.worktrees/my-repo/
   - Save configuration globally (~/.config/git-worktree-cli/projects/)
 
 Use --local to save config as git-worktree-config.jsonc next to the repo instead.
+
+Use --worktrees-root <dir> (or \"worktreesRoot\" in
+~/.config/git-worktree-cli/settings.jsonc) to keep worktrees under one folder
+instead. Each project gets a folder named after its path relative to home:
+~/code/my-repo -> <dir>/code-my-repo/. If that folder is already used by
+another project, init stops with an error.
+
+Projects initialized before 0.19 keep their <repo-name>-worktrees/ folder,
+since the path is stored in the config.
 
 The config file can be edited to add hooks (postAdd, preRemove, postRemove)
 that run automatically when creating or removing worktrees. A failing hook
@@ -161,13 +175,18 @@ makes 'gwt add' or 'gwt remove' exit non-zero.")]
         /// Write config to project directory instead of global location
         #[arg(long)]
         local: bool,
+        /// Put the worktrees under this folder (e.g. ~/.worktrees) instead of
+        /// .worktrees/ next to the repository
+        #[arg(long, value_name = "DIR")]
+        worktrees_root: Option<std::path::PathBuf>,
     },
 
     /// Add a new worktree for a branch
     #[command(long_about = "\
 Add a new worktree for a branch.
 
-Creates a git worktree at <repo>-worktrees/<branch-name>/. If the branch
+Creates a git worktree at <worktrees-path>/<branch-name>/ (by default
+.worktrees/<repo>/<branch-name>/ next to the repository). If the branch
 exists locally or on the remote, it checks out that branch. Otherwise,
 creates a new branch from origin/<main-branch>.
 
@@ -227,6 +246,8 @@ cancel with q or esc. Also handles orphaned worktrees with stale git
 references.
 
 Runs preRemove hooks before removal and postRemove hooks after.
+Folders left empty by the removal (the project's worktrees folder, the
+shared .worktrees folder) are deleted.
 
 Hook failures fail closed. If a preRemove hook exits non-zero, the remaining
 hooks are skipped, the worktree and branch are kept, and gwt exits non-zero:
