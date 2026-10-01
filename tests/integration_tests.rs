@@ -95,6 +95,74 @@ fn test_gwt_init_no_remote() {
 }
 
 #[test]
+#[serial]
+fn test_gwt_init_ignores_insteadof_rewrite() {
+    let temp_dir = setup_test_env();
+    let temp_path = temp_dir.path();
+
+    let repo_dir = temp_path.join("my-repo");
+    fs::create_dir(&repo_dir).unwrap();
+    create_test_git_repo(&repo_dir, "git@github.com:test/my-repo.git");
+
+    // Rewrite the remote to an SSH host alias, as a per-account ~/.gitconfig rule does
+    std::process::Command::new("git")
+        .args(["config", "url.git@github-work:test/.insteadOf", "git@github.com:test/"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to set insteadOf");
+
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Detected provider: Github"))
+        .stdout(predicate::str::contains(
+            "✓ Repository: git@github.com:test/my-repo.git",
+        ));
+
+    let config_content = fs::read_to_string(temp_path.join("git-worktree-config.jsonc")).unwrap();
+    assert!(config_content.contains("\"repositoryUrl\": \"git@github.com:test/my-repo.git\""));
+
+    cleanup_test_env(temp_dir);
+}
+
+#[test]
+#[serial]
+fn test_gwt_init_expands_insteadof_shorthand() {
+    let temp_dir = setup_test_env();
+    let temp_path = temp_dir.path();
+
+    let repo_dir = temp_path.join("my-repo");
+    fs::create_dir(&repo_dir).unwrap();
+    // A shorthand remote only names its provider once insteadOf expands it
+    create_test_git_repo(&repo_dir, "gh:test/my-repo.git");
+    std::process::Command::new("git")
+        .args(["config", "url.git@github.com:.insteadOf", "gh:"])
+        .current_dir(&repo_dir)
+        .output()
+        .expect("Failed to set insteadOf");
+
+    let mut cmd = Command::cargo_bin("gwt").unwrap();
+    cmd.current_dir(&repo_dir)
+        .env("HOME", temp_path)
+        .arg("init")
+        .arg("--local");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Detected provider: Github"))
+        .stdout(predicate::str::contains(
+            "✓ Repository: git@github.com:test/my-repo.git",
+        ));
+
+    cleanup_test_env(temp_dir);
+}
+
+#[test]
 fn test_gwt_no_args_shows_long_help() {
     let mut cmd = Command::cargo_bin("gwt").unwrap();
 

@@ -179,8 +179,9 @@ impl GitWorktreeConfig {
             return Ok(None);
         }
 
-        // Strategy 1: Try to match by repository URL
-        if let Some(repo_url) = git::get_remote_origin_url(start_dir) {
+        // Strategy 1: Try to match by repository URL, as configured or insteadOf-rewritten
+        // (configs saved before 0.19.1 are named after the rewritten URL)
+        for repo_url in git::get_remote_origin_urls(start_dir) {
             let filename = generate_config_filename(&repo_url);
             let config_path = projects_dir.join(&filename);
             if config_path.exists() {

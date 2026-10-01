@@ -183,9 +183,23 @@ pub fn get_toplevel(path: &Path) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Get the remote origin URL from a git repository
-pub fn get_remote_origin_url(path: &Path) -> Option<String> {
-    execute_capture(&["remote", "get-url", "origin"], Some(path)).ok()
+/// Get the remote origin URL candidates from a git repository: as configured, then with
+/// `url.<base>.insteadOf` rewrites applied (`git remote get-url`). A rewrite can hide the provider
+/// (an SSH host alias like `git@github-work:org/repo.git`) or reveal it (a shorthand like
+/// `gh:org/repo`), so callers try both. Deduplicated; empty when there is no origin.
+pub fn get_remote_origin_urls(path: &Path) -> Vec<String> {
+    let mut urls: Vec<String> = Vec::new();
+    for args in [
+        &["config", "--get", "remote.origin.url"][..],
+        &["remote", "get-url", "origin"][..],
+    ] {
+        if let Ok(url) = execute_capture(args, Some(path)) {
+            if !url.is_empty() && !urls.contains(&url) {
+                urls.push(url);
+            }
+        }
+    }
+    urls
 }
 
 #[derive(Debug, Clone)]
