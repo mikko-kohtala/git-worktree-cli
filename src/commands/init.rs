@@ -15,11 +15,17 @@ pub fn run(local: bool, worktrees_root: Option<PathBuf>) -> Result<()> {
         .ok_or_else(|| Error::git("Not in a git repository. Please run this command from inside a git repository."))?;
 
     // Get the remote URL
-    let repo_url = git::get_remote_origin_url(&git_root)
+    let repo_urls = git::get_remote_origin_urls(&git_root);
+    let first_url = repo_urls
+        .first()
         .ok_or_else(|| Error::git("No remote 'origin' found. Please add a remote first."))?;
 
-    // Detect the repository provider
-    let detected_provider = detect_provider_from_url(&repo_url).ok_or_else(|| create_provider_error(&repo_url))?;
+    // Detect the repository provider: the configured URL first, the insteadOf-rewritten one if
+    // only it names a known provider
+    let (repo_url, detected_provider) = repo_urls
+        .iter()
+        .find_map(|url| detect_provider_from_url(url).map(|provider| (url.clone(), provider)))
+        .ok_or_else(|| create_provider_error(first_url))?;
 
     println!("{}", format!("✓ Detected provider: {:?}", detected_provider).green());
 
